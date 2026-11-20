@@ -1,0 +1,8 @@
+{
+  "name": "CARC Trinquete - Gestor de Turnos y Cantina",
+  "description": "Sistema integral de gestión de turnos de cancha de pelota paleta, padrón de pelotaris, torneos y punto de venta (POS) y caja para la cantina del Club Atlético Río Colorado.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
