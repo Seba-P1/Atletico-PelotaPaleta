@@ -19,6 +19,7 @@ import {
   ConfirmacionRegistroModal,
   ConfirmacionRegistroState,
 } from './components/ConfirmacionRegistroModal';
+import { PWAUpdater } from './components/PWAUpdater';
 
 import {
   Jugador,
@@ -2327,6 +2328,9 @@ export default function App() {
           onCancel={() => setConfirmState(null)}
         />
       )}
+
+      {/* Auto-actualización automática de PWA */}
+      <PWAUpdater />
 
       {/* Toast Notification estilo App Móvil Nativa */}
       {toastMsg && (

@@ -4,5 +4,9 @@ dist/
 coverage/
 .DS_Store
 *.log
+*.bak
+*.old
+.opencode/
+AGENTS.md
 .env*
 !.env.example
