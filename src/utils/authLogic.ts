@@ -276,4 +276,44 @@ export function parsearRetornoConfirmacionEmail(
   return { status: 'none' };
 }
 
+export interface ValidacionReclamoPadron {
+  valido: boolean;
+  dniLimpio: string;
+  error?: string;
+}
+
+export function validarReclamoFichaPadron(
+  jugador: Jugador | undefined,
+  dniIngresado: string
+): ValidacionReclamoPadron {
+  if (!jugador) {
+    return {
+      valido: false,
+      dniLimpio: '',
+      error: 'Seleccioná tu nombre de la lista del padrón.',
+    };
+  }
+
+  const dniLimpio = normalizarDni(dniIngresado);
+  if (dniLimpio.length < 6) {
+    return {
+      valido: false,
+      dniLimpio,
+      error: 'Ingresá tu DNI numérico sin puntos (mínimo 6 dígitos) para validar tu perfil.',
+    };
+  }
+
+  const dniFicha = normalizarDni(jugador.dni || '');
+  if (dniFicha.length >= 6 && dniFicha !== dniLimpio) {
+    return {
+      valido: false,
+      dniLimpio,
+      error: `El DNI ingresado no coincide con el registrado para ${jugador.nombre}. Verificalo o consultá con la Comisión Directiva.`,
+    };
+  }
+
+  return { valido: true, dniLimpio };
+}
+
+
 

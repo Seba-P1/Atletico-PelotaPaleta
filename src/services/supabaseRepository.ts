@@ -644,6 +644,36 @@ export const supabaseRepository = {
     return mapJugadorFromDb(data);
   },
 
+  async vincularMiFichaPadronRpc(params: {
+    jugadorId: number;
+    dni: string;
+    telefono?: string;
+    fechaNacimiento?: string;
+    contactoEmergencia?: string;
+    observaciones?: string;
+  }): Promise<Jugador> {
+    const client = getClient();
+    const { data, error } = await client.rpc('vincular_mi_ficha_padron', {
+      p_jugador_id: params.jugadorId,
+      p_dni: params.dni.trim(),
+      p_telefono: params.telefono?.trim() || null,
+      p_fecha_nacimiento: params.fechaNacimiento?.trim() || null,
+      p_contacto_emergencia: params.contactoEmergencia?.trim() || null,
+      p_observaciones: params.observaciones?.trim() || null,
+    });
+
+    if (error) {
+      const msg = error.message || '';
+      if (msg.includes('Could not find the function') || msg.includes('vincular_mi_ficha_padron')) {
+        throw new Error(
+          'Falta ejecutar el SQL de vinculación del padrón (vincular_mi_ficha_padron) en Supabase SQL Editor.'
+        );
+      }
+      throw new Error(msg);
+    }
+    return mapJugadorFromDb(data);
+  },
+
   async insertJugador(j: Omit<Jugador, 'id'>): Promise<Jugador> {
     const client = getClient();
     const { data, error } = await client

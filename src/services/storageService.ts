@@ -32,6 +32,7 @@ export const STORAGE_KEYS = {
   LOCAL_AUTH: 'carc_local_auth_v1',
   LOCAL_SESSION: 'carc_local_session_v1',
   PENDING_ACCESS_CODE: 'carc_pending_access_code_v1',
+  PENDING_PADRON_CLAIM: 'carc_pending_padron_claim_v1',
   CLUB_CONFIG: 'carc_club_config_v3',
   MODO_MESAS: 'carc_modo_mesas',
   DIAS_BLOQUEADOS: 'carc_dias_bloqueados_v1',
@@ -289,6 +290,60 @@ export const storageService = {
 
   clearPendingAccessCode(): void {
     localStorage.removeItem(STORAGE_KEYS.PENDING_ACCESS_CODE);
+  },
+
+  savePendingPadronClaim(data: {
+    email: string;
+    jugadorId: number;
+    dni: string;
+    telefono?: string;
+    fechaNacimiento?: string;
+    contactoEmergencia?: string;
+    observaciones?: string;
+  }): void {
+    const emailNorm = data.email.trim().toLowerCase();
+    if (!emailNorm || !data.jugadorId) return;
+    localStorage.setItem(
+      STORAGE_KEYS.PENDING_PADRON_CLAIM,
+      JSON.stringify({ ...data, email: emailNorm })
+    );
+  },
+
+  loadPendingPadronClaim(email?: string | null): {
+    email: string;
+    jugadorId: number;
+    dni: string;
+    telefono?: string;
+    fechaNacimiento?: string;
+    contactoEmergencia?: string;
+    observaciones?: string;
+  } | null {
+    const saved = safeParseJson<{
+      email?: string;
+      jugadorId?: number;
+      dni?: string;
+      telefono?: string;
+      fechaNacimiento?: string;
+      contactoEmergencia?: string;
+      observaciones?: string;
+    } | null>(localStorage.getItem(STORAGE_KEYS.PENDING_PADRON_CLAIM), null);
+    if (!saved?.jugadorId || !saved.dni || !saved.email) return null;
+    if (email && saved.email.trim().toLowerCase() !== email.trim().toLowerCase()) {
+      return null;
+    }
+    return {
+      email: saved.email,
+      jugadorId: Number(saved.jugadorId),
+      dni: saved.dni,
+      telefono: saved.telefono,
+      fechaNacimiento: saved.fechaNacimiento,
+      contactoEmergencia: saved.contactoEmergencia,
+      observaciones: saved.observaciones,
+    };
+  },
+
+  clearPendingPadronClaim(): void {
+    localStorage.removeItem(STORAGE_KEYS.PENDING_PADRON_CLAIM);
   },
 };
 

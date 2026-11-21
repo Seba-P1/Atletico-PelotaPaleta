@@ -21,7 +21,11 @@ import {
   filtrarMovimientosPorFecha
 } from './cantinaLogic';
 import { construirZonasYPartidos, registrarResultadoPartido } from './torneoLogic';
-import { construirEmailRedirectUrl, parsearRetornoConfirmacionEmail } from './authLogic';
+import {
+  construirEmailRedirectUrl,
+  parsearRetornoConfirmacionEmail,
+  validarReclamoFichaPadron,
+} from './authLogic';
 import { Turno, ProductoCantina, ItemPedido, MovimientoCaja, ParejaTorneo, TorneoData, Jugador } from '../types';
 
 test('validarReserva rechaza parejas incompletas', () => {
@@ -1025,6 +1029,61 @@ test('authLogic: construirEmailRedirectUrl y parsearRetornoConfirmacionEmail det
   assert.equal(errRes.status, 'error');
   assert.match(errRes.mensajeError || '', /venció/i);
 });
+
+test('authLogic: validarReclamoFichaPadron valida coincidencia exacta, normalización y rechazos', () => {
+  const jugadorConDni: Jugador = {
+    id: 101,
+    nombre: 'Ariel Gorjón',
+    dni: '30.111.222',
+    telefono: '2931-111111',
+    categoria: '1ra',
+    rol: 'Delantero',
+    saldoCuentaCorriente: 0,
+    activo: true,
+    partidosJugados: 12,
+  };
+
+  // Coincidencia válida con formato con puntos o sin puntos
+  const ok1 = validarReclamoFichaPadron(jugadorConDni, '30111222');
+  assert.equal(ok1.valido, true);
+  assert.equal(ok1.dniLimpio, '30111222');
+
+  const ok2 = validarReclamoFichaPadron(jugadorConDni, ' 30.111.222 ');
+  assert.equal(ok2.valido, true);
+  assert.equal(ok2.dniLimpio, '30111222');
+
+  // Jugador en el padrón sin DNI cargado: acepta cualquier DNI válido (>= 6 dígitos)
+  const jugadorSinDni: Jugador = {
+    id: 102,
+    nombre: 'Pelotari Nuevo Padrón',
+    dni: '',
+    telefono: '2931-222222',
+    categoria: '2da',
+    rol: 'Zaguero',
+    saldoCuentaCorriente: 0,
+    activo: true,
+    partidosJugados: 0,
+  };
+  const okSinDni = validarReclamoFichaPadron(jugadorSinDni, '40.999.888');
+  assert.equal(okSinDni.valido, true);
+  assert.equal(okSinDni.dniLimpio, '40999888');
+
+  // Rechazo cuando no coincide con el DNI registrado
+  const falloDni = validarReclamoFichaPadron(jugadorConDni, '30999999');
+  assert.equal(falloDni.valido, false);
+  assert.match(falloDni.error || '', /no coincide/i);
+
+  // Rechazo por DNI demasiado corto (< 6 dígitos)
+  const falloCorto = validarReclamoFichaPadron(jugadorConDni, '12345');
+  assert.equal(falloCorto.valido, false);
+  assert.match(falloCorto.error || '', /mínimo 6 dígitos/i);
+
+  // Rechazo cuando falta jugador
+  const falloSinJugador = validarReclamoFichaPadron(undefined, '30111222');
+  assert.equal(falloSinJugador.valido, false);
+  assert.match(falloSinJugador.error || '', /lista del padrón/i);
+});
+
 
 
 

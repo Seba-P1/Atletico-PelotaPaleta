@@ -9,6 +9,7 @@ import {
   KeyRound,
   UserPlus,
   ArrowLeft,
+  Users,
 } from 'lucide-react';
 import { ClubConfig } from '../types';
 
@@ -19,6 +20,7 @@ interface LoginModalProps {
   onIniciarSesion: (emailOIdentificador: string, password: string) => Promise<void>;
   onActivarAccesoJugador: (email: string, dni: string, password: string) => Promise<void>;
   onIrARegistro: () => void;
+  onIrARegistroPadron?: () => void;
   onCerrar: () => void;
 }
 
@@ -29,6 +31,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   onIniciarSesion,
   onActivarAccesoJugador,
   onIrARegistro,
+  onIrARegistroPadron,
   onCerrar,
 }) => {
   const [modo, setModo] = useState<'login' | 'activar'>('login');
@@ -341,20 +344,37 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         )}
 
         {/* Footer cross-links */}
-        <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-col gap-2 text-[11px]">
+        <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-col gap-2.5 text-[11px]">
           {modo === 'login' && (
-            <button
-              type="button"
-              onClick={() => {
-                setErrorMsg('');
-                setPassword('');
-                setModo('activar');
-              }}
-              className="text-left text-slate-500 dark:text-slate-400 hover:text-emerald-700 dark:hover:text-emerald-400 transition cursor-pointer"
-            >
-              ¿Ya estás en el padrón sin contraseña?{' '}
-              <span className="font-bold underline">Activar con Email y DNI</span>
-            </button>
+            <>
+              {onIrARegistroPadron && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onCerrar();
+                    onIrARegistroPadron();
+                  }}
+                  className="w-full text-left p-2.5 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100/70 dark:hover:bg-emerald-900/40 transition cursor-pointer flex items-center justify-between gap-2"
+                >
+                  <span className="flex items-center gap-2">
+                    <Users className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <span>¿Tu nombre ya está en el padrón? <strong>Elegí tu perfil y validalo con DNI</strong></span>
+                  </span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setErrorMsg('');
+                  setPassword('');
+                  setModo('activar');
+                }}
+                className="text-left text-slate-500 dark:text-slate-400 hover:text-emerald-700 dark:hover:text-emerald-400 transition cursor-pointer"
+              >
+                ¿Ya estás en el padrón sin contraseña?{' '}
+                <span className="font-bold underline">Activar con Email y DNI</span>
+              </button>
+            </>
           )}
           <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
             <span>¿Todavía no te registraste?</span>

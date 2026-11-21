@@ -30,20 +30,48 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Modo oscuro en gris oscuro neutro / grafito (sin tinte azul) */
+html.dark {
+  color-scheme: dark;
+  --color-slate-950: #0f1110;
+  --color-slate-900: #171a18;
+  --color-slate-800: #252927;
+  --color-slate-700: #343936;
+  --color-slate-600: #4f5652;
+  --color-slate-500: #717874;
+  --color-slate-400: #9da4a0;
+  --color-slate-300: #c8ceca;
+  --color-slate-200: #dfe4e1;
+  --color-slate-100: #eff2f0;
+  --color-slate-50: #f7f9f8;
+}
+
+/* Degradado gris oscuro con textura micro-puntillada y destello verde CARC muy sutil */
+html.dark body {
+  background-color: #0f1110;
+  background-image:
+    radial-gradient(ellipse 85% 55% at 50% -15%, rgba(16, 185, 129, 0.09), transparent 65%),
+    radial-gradient(circle at 95% 95%, rgba(4, 120, 87, 0.06), transparent 52%),
+    radial-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(180deg, #111312 0%, #161917 50%, #0e100f 100%);
+  background-size: 100% 100%, 100% 100%, 22px 22px, 100% 100%;
+  background-attachment: fixed;
+}
+
 /* Custom scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: rgba(15, 23, 42, 0.6);
+  background: rgba(15, 17, 16, 0.75);
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(51, 65, 85, 0.7);
+  background: rgba(63, 69, 65, 0.75);
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(16, 185, 129, 0.6);
+  background: rgba(16, 185, 129, 0.65);
 }
 
 /* Print styles for Tournaments and Cantina tickets */

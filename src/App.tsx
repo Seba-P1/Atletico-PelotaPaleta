@@ -10,6 +10,7 @@ import { ConfirmDialog } from './components/ConfirmDialog';
 import {
   RegistroJugadorModal,
   NuevoJugadorRegistroInput,
+  VincularPadronInput,
 } from './components/RegistroJugadorModal';
 import { LoginModal } from './components/LoginModal';
 import { JugadorPerfilModal } from './components/JugadorPerfilModal';
@@ -56,6 +57,7 @@ import {
   AccessCodesConfig,
   DEFAULT_ACCESS_CODES,
   parsearRetornoConfirmacionEmail,
+  validarReclamoFichaPadron,
 } from './utils/authLogic';
 import {
   evaluarEstadoFinancieroJugador,
@@ -437,6 +439,27 @@ export default function App() {
       let session = await supabaseRepository.getCurrentSession();
       if (!activo) return null;
       if (session) {
+        const reclamoPendiente = storageService.loadPendingPadronClaim(session.email);
+        if (reclamoPendiente) {
+          try {
+            const vinculado = await supabaseRepository.vincularMiFichaPadronRpc({
+              jugadorId: reclamoPendiente.jugadorId,
+              dni: reclamoPendiente.dni,
+              telefono: reclamoPendiente.telefono,
+              fechaNacimiento: reclamoPendiente.fechaNacimiento,
+              contactoEmergencia: reclamoPendiente.contactoEmergencia,
+              observaciones: reclamoPendiente.observaciones,
+            });
+            setJugadores((prev) =>
+              prev.map((j) => (j.id === vinculado.id ? vinculado : j))
+            );
+          } catch (err) {
+            console.error('Error procesando reclamo pendiente de padrón:', err);
+          } finally {
+            storageService.clearPendingPadronClaim();
+          }
+        }
+
         const codigoPendiente = storageService.loadPendingAccessCode(session.email);
         if (codigoPendiente) {
           try {
@@ -561,6 +584,7 @@ export default function App() {
   const [modalDetalleTurnoId, setModalDetalleTurnoId] = useState<string | null>(null);
   const [mostrarModalTorneo, setMostrarModalTorneo] = useState<boolean>(false);
   const [modalRegistroJugadorAbierto, setModalRegistroJugadorAbierto] = useState<boolean>(false);
+  const [modoRegistroInicial, setModoRegistroInicial] = useState<'padron' | 'nuevo' | undefined>(undefined);
   const [modalPerfilAbierto, setModalPerfilAbierto] = useState<boolean>(false);
   const [misConsumosSupabase, setMisConsumosSupabase] = useState<ConsumoIndividual[]>([]);
   const [cargandoMisConsumos, setCargandoMisConsumos] = useState<boolean>(false);
@@ -611,6 +635,27 @@ export default function App() {
   const handleIniciarSesion = async (emailOIdentificador: string, password: string) => {
     if (supabaseConectado) {
       let session = await supabaseRepository.signInWithCredentials(emailOIdentificador, password);
+      const reclamoPendiente = storageService.loadPendingPadronClaim(session.email);
+      if (reclamoPendiente) {
+        try {
+          const vinculado = await supabaseRepository.vincularMiFichaPadronRpc({
+            jugadorId: reclamoPendiente.jugadorId,
+            dni: reclamoPendiente.dni,
+            telefono: reclamoPendiente.telefono,
+            fechaNacimiento: reclamoPendiente.fechaNacimiento,
+            contactoEmergencia: reclamoPendiente.contactoEmergencia,
+            observaciones: reclamoPendiente.observaciones,
+          });
+          setJugadores((prev) =>
+            prev.map((j) => (j.id === vinculado.id ? vinculado : j))
+          );
+        } catch (err) {
+          console.error('Error procesando reclamo pendiente de padrón al iniciar sesión:', err);
+        } finally {
+          storageService.clearPendingPadronClaim();
+        }
+      }
+
       const codigoPendiente = storageService.loadPendingAccessCode(session.email);
       if (codigoPendiente) {
         try {
@@ -946,6 +991,159 @@ export default function App() {
       etiquetaRol
         ? `¡Bienvenido/a ${nuevoLocal.nombre}! Acceso habilitado: ${etiquetaRol}.`
         : `¡Bienvenido/a ${nuevoLocal.nombre}! Tu cuenta y ficha quedaron guardadas.`
+    );
+  };
+
+  // Vincular ficha existente del padrón a cuenta propia
+  const handleVincularPadron = async (datos: VincularPadronInput) => {
+    const jugadorTarget = jugadores.find((j) => j.id === datos.jugadorId);
+    if (!jugadorTarget) {
+      throw new Error('No se encontró la ficha seleccionada en el padrón.');
+    }
+
+    const valid = validarReclamoFichaPadron(jugadorTarget, datos.dni);
+    if (!valid.valido) {
+      throw new Error(valid.error || 'El DNI no coincide con la ficha seleccionada.');
+    }
+
+    const codigoTrim = datos.codigoAcceso?.trim() || '';
+
+    if (supabaseConectado) {
+      const authRes = await supabaseRepository.signUpJugadorAuth({
+        email: datos.email,
+        password: datos.password,
+        nombreCompleto: jugadorTarget.nombre,
+        dni: valid.dniLimpio,
+      });
+
+      if (authRes.hasSession) {
+        const vinculado = await supabaseRepository.vincularMiFichaPadronRpc({
+          jugadorId: datos.jugadorId,
+          dni: valid.dniLimpio,
+          telefono: datos.telefono,
+          fechaNacimiento: datos.fechaNacimiento,
+          contactoEmergencia: datos.contactoEmergencia,
+          observaciones: datos.observaciones,
+        });
+
+        setJugadores((prev) =>
+          prev.map((j) => (j.id === vinculado.id ? vinculado : j))
+        );
+        setModalRegistroJugadorAbierto(false);
+        setUsuarioAutenticado(true);
+        setSessionEmail(datos.email.trim());
+        setNombreUsuario(vinculado.nombre);
+
+        if (codigoTrim) {
+          try {
+            const sessionUpd = await supabaseRepository.canjearCodigoAccesoRpc(
+              codigoTrim,
+              vinculado.nombre
+            );
+            if (sessionUpd) {
+              setRolAcceso(sessionUpd.rolAcceso);
+              setAdminEmail(sessionUpd.rolAcceso === 'super_admin' ? sessionUpd.email : null);
+              if (sessionUpd.rolAcceso === 'super_admin' || sessionUpd.rolAcceso === 'cantinero') {
+                await cargarDatosAdmin(sessionUpd.rolAcceso === 'super_admin');
+              }
+              mostrarToast(
+                sessionUpd.rolAcceso === 'super_admin'
+                  ? `¡Bienvenido/a ${vinculado.nombre}! Acceso de Comisión Directiva activado.`
+                  : `¡Bienvenido/a ${vinculado.nombre}! Acceso de Cantina y Turnos activado.`
+              );
+              return;
+            }
+          } catch {
+            setRolAcceso('jugador');
+            setAdminEmail(null);
+            mostrarToast(
+              `¡Ficha vinculada, ${vinculado.nombre}! El código de acceso no coincidió, podés reintentarlo en "Mi Perfil".`
+            );
+            return;
+          }
+        }
+
+        setRolAcceso('jugador');
+        setAdminEmail(null);
+        mostrarToast(`¡Ficha vinculada con éxito! Bienvenido/a, ${vinculado.nombre}.`);
+      } else {
+        storageService.savePendingPadronClaim({
+          email: datos.email,
+          jugadorId: datos.jugadorId,
+          dni: valid.dniLimpio,
+          telefono: datos.telefono,
+          fechaNacimiento: datos.fechaNacimiento,
+          contactoEmergencia: datos.contactoEmergencia,
+          observaciones: datos.observaciones,
+        });
+        if (codigoTrim) {
+          storageService.savePendingAccessCode(datos.email, codigoTrim);
+        }
+        setModalRegistroJugadorAbierto(false);
+        setConfirmacionRegistroModal({
+          estado: 'pendiente',
+          nombre: jugadorTarget.nombre,
+          email: datos.email.trim(),
+          tieneCodigoPendiente: Boolean(codigoTrim),
+        });
+      }
+      return;
+    }
+
+    // Modo local / offline
+    let rolAsignado: RolAcceso = 'jugador';
+    let etiquetaRol = '';
+    if (codigoTrim) {
+      const codeRes = resolverCodigoAcceso(codigoTrim, accessCodes);
+      if (!codeRes.valido) {
+        throw new Error(codeRes.error || 'El código de acceso institucional no es válido.');
+      }
+      rolAsignado = codeRes.rol;
+      etiquetaRol = codeRes.etiquetaRol || '';
+    }
+
+    const actualizado: Jugador = {
+      ...jugadorTarget,
+      email: datos.email.trim(),
+      dni: valid.dniLimpio,
+      telefono: datos.telefono?.trim() || jugadorTarget.telefono,
+      fechaNacimiento: datos.fechaNacimiento?.trim() || jugadorTarget.fechaNacimiento,
+      contactoEmergencia: datos.contactoEmergencia?.trim() || jugadorTarget.contactoEmergencia,
+      observaciones: datos.observaciones?.trim()
+        ? jugadorTarget.observaciones
+          ? `${jugadorTarget.observaciones} · ${datos.observaciones.trim()}`
+          : datos.observaciones.trim()
+        : jugadorTarget.observaciones,
+      activo: true,
+    };
+
+    setJugadores((prev) =>
+      prev.map((j) => (j.id === actualizado.id ? actualizado : j))
+    );
+    storageService.saveLocalAccount({
+      email: datos.email,
+      password: datos.password,
+      nombre: actualizado.nombre,
+      jugadorId: actualizado.id,
+      rol: rolAsignado,
+    });
+    storageService.saveLocalSession({
+      esAdmin: rolAsignado === 'super_admin',
+      rol: rolAsignado,
+      email: datos.email,
+      nombre: actualizado.nombre,
+      jugadorId: actualizado.id,
+    });
+    setUsuarioAutenticado(true);
+    setRolAcceso(rolAsignado);
+    setAdminEmail(rolAsignado === 'super_admin' ? datos.email.trim() : null);
+    setSessionEmail(datos.email.trim());
+    setNombreUsuario(actualizado.nombre);
+    setModalRegistroJugadorAbierto(false);
+    mostrarToast(
+      etiquetaRol
+        ? `¡Ficha vinculada! Bienvenido/a ${actualizado.nombre} (${etiquetaRol}).`
+        : `¡Ficha vinculada con éxito! Bienvenido/a, ${actualizado.nombre}.`
     );
   };
 
@@ -1746,7 +1944,7 @@ export default function App() {
   }, [jugadorLogueado, supabaseConectado, misConsumosSupabase, consumos]);
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans selection:bg-emerald-600 selection:text-white transition-colors duration-150 w-full max-w-full overflow-x-clip">
+    <div className="min-h-screen bg-slate-50 dark:bg-transparent text-slate-900 dark:text-slate-100 flex flex-col font-sans selection:bg-emerald-600 selection:text-white transition-colors duration-150 w-full max-w-full overflow-x-clip">
       <Header
         vistaActiva={vistaActiva}
         setVistaActiva={(v) => {
@@ -2020,7 +2218,14 @@ export default function App() {
           supabaseConfigurado={supabaseConfigurado}
           onIniciarSesion={handleIniciarSesion}
           onActivarAccesoJugador={handleActivarAccesoJugador}
-          onIrARegistro={() => setModalRegistroJugadorAbierto(true)}
+          onIrARegistro={() => {
+            setModoRegistroInicial('nuevo');
+            setModalRegistroJugadorAbierto(true);
+          }}
+          onIrARegistroPadron={() => {
+            setModoRegistroInicial('padron');
+            setModalRegistroJugadorAbierto(true);
+          }}
           onCerrar={() => setModalLoginAbierto(false)}
         />
       )}
@@ -2036,7 +2241,10 @@ export default function App() {
           usuarioActual={nombreUsuario}
           jugadorLogueado={jugadorLogueado}
           esAdmin={permisos.esStaff}
-          onAbrirRegistroJugador={() => setModalRegistroJugadorAbierto(true)}
+          onAbrirRegistroJugador={() => {
+            setModoRegistroInicial('nuevo');
+            setModalRegistroJugadorAbierto(true);
+          }}
           onConfirmarReserva={handleConfirmarReserva}
           onCerrar={() => setModalReservaHorarioId(null)}
         />
@@ -2048,8 +2256,13 @@ export default function App() {
           clubConfig={clubConfig}
           jugadoresExistentes={jugadores}
           onRegistrar={handleRegistrarJugadorPublico}
+          onVincularPadron={handleVincularPadron}
+          modoInicial={modoRegistroInicial}
           onIrAIngresar={abrirLogin}
-          onCerrar={() => setModalRegistroJugadorAbierto(false)}
+          onCerrar={() => {
+            setModalRegistroJugadorAbierto(false);
+            setModoRegistroInicial(undefined);
+          }}
         />
       )}
 
