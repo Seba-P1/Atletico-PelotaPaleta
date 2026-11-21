@@ -612,7 +612,11 @@ import {
   resolverCodigoAcceso,
 } from './authLogic';
 import { calcularMetricasDiarias, filtrarHistorialTurnos } from './metricsLogic';
-import { parsearPadronImportado } from './importLogic';
+import {
+  parsearPadronImportado,
+  formatearNombrePropio,
+  normalizarFechaNacimiento,
+} from './importLogic';
 import { ConsumoIndividual, HorarioConfig } from '../types';
 
 test('turnosLogic: regla de reserva en el día desde las 08:00 hs AR y bloqueo total de jornada', () => {
@@ -1083,6 +1087,62 @@ test('authLogic: validarReclamoFichaPadron valida coincidencia exacta, normaliza
   assert.equal(falloSinJugador.valido, false);
   assert.match(falloSinJugador.error || '', /lista del padrón/i);
 });
+
+test('importLogic: detecta y bloquea archivo binario ZIP/PK sin decodificar', () => {
+  const binaryHeader = 'PK\x03\x04\x14\x00\x06\x00[Content_Types].xml';
+  const resultado = parsearPadronImportado(binaryHeader, []);
+  assert.equal(resultado.validos.length, 0);
+  assert.equal(resultado.duplicados.length, 0);
+  assert.equal(resultado.errores.length, 1);
+  assert.equal(resultado.errores[0].fila, 1);
+  assert.match(resultado.errores[0].motivo, /archivo Excel binario/i);
+});
+
+test('importLogic: normalizarFechaNacimiento y formatearNombrePropio', () => {
+  assert.equal(normalizarFechaNacimiento('1989-05-01'), '1989-05-01');
+  assert.equal(normalizarFechaNacimiento('1/5/1989'), '1989-05-01');
+  assert.equal(normalizarFechaNacimiento('15/07/1987'), '1987-07-15');
+  assert.equal(normalizarFechaNacimiento('29/02/2024'), '2024-02-29'); // bisiesto válido
+  // Fechas inválidas
+  assert.equal(normalizarFechaNacimiento('29/02/2023'), undefined); // no bisiesto
+  assert.equal(normalizarFechaNacimiento('31/02/1990'), undefined); // día inválido
+  assert.equal(normalizarFechaNacimiento('15/13/1990'), undefined); // mes > 12
+  assert.equal(normalizarFechaNacimiento('15/07/1899'), undefined); // año < 1920
+  assert.equal(normalizarFechaNacimiento(''), undefined);
+
+  assert.equal(formatearNombrePropio('ABDALA'), 'Abdala');
+  assert.equal(formatearNombrePropio('ANDREA MARIANA'), 'Andrea Mariana');
+  assert.equal(formatearNombrePropio('balbo mosetto'), 'Balbo Mosetto');
+  assert.equal(formatearNombrePropio('McEnroe'), 'McEnroe'); // preserva mayúsculas intermedias
+});
+
+test('importLogic: parsee correctamente planilla con formato del club CARC', () => {
+  const tsvClub = [
+    '\tDni\tApellido\tNombre\tDireccion\tTelefono\tFecha Nacimiento\t',
+    '1\t20123456\tABDALA\tANDREA MARIANA\tLOS CHAÑARES 228\t2931412345\t1/5/1989\t',
+    '2\t30987654\tBALBO\tJUAN CARLOS\t\t\t\t',
+    '94\t\t\t\t\t\t',
+  ].join('\n');
+
+  const resultado = parsearPadronImportado(tsvClub, []);
+  assert.equal(resultado.validos.length, 2);
+  assert.equal(resultado.duplicados.length, 0);
+  assert.equal(resultado.errores.length, 0);
+
+  const j1 = resultado.validos[0];
+  assert.equal(j1.nombre, 'Andrea Mariana Abdala');
+  assert.equal(j1.dni, '20123456');
+  assert.equal(j1.telefono, '2931412345');
+  assert.equal(j1.fechaNacimiento, '1989-05-01');
+  assert.match(j1.observaciones || '', /Dirección: Los Chañares 228/);
+
+  const j2 = resultado.validos[1];
+  assert.equal(j2.nombre, 'Juan Carlos Balbo');
+  assert.equal(j2.dni, '30987654');
+  assert.equal(j2.telefono, '');
+  assert.equal(j2.fechaNacimiento, undefined);
+});
+
 
 
 

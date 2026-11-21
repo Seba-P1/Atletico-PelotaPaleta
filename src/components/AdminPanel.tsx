@@ -25,6 +25,7 @@ import {
 } from '../utils/billingLogic';
 import { AccessCodesConfig, DEFAULT_ACCESS_CODES } from '../utils/authLogic';
 import { parsearPadronImportado } from '../utils/importLogic';
+import { leerArchivoPlanillaATexto } from '../utils/excelImport';
 import { AdminCajaSection } from './AdminCajaSection';
 import { AdminMetricasSection } from './AdminMetricasSection';
 import { AdminHistorialTurnosSection } from './AdminHistorialTurnosSection';
@@ -2040,7 +2041,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer"
                 >
                   <FileSpreadsheet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                  <span>{mostrarImportador ? 'Cerrar Importador' : 'Importar Planilla (CSV)'}</span>
+                  <span>{mostrarImportador ? 'Cerrar Importador' : 'Importar Planilla (Excel / CSV)'}</span>
                 </button>
 
                 <button
@@ -2083,24 +2084,31 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       <span>Importar Planilla de Pelotaris / Seguro (Excel, CSV o Google Sheets)</span>
                     </h4>
                     <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5">
-                      Subí un archivo .CSV/.TSV o pegá directamente las filas desde la planilla de seguro (detecta Nombre, Apellido, DNI, Fecha Nac., Teléfono, Localidad, Email y Obra Social/Seguro).
+                      Subí un archivo Excel (.xlsx / .xls), .CSV/.TSV o pegá directamente las filas desde la planilla de seguro (detecta DNI, Apellido, Nombre, Dirección, Teléfono y Fecha Nacimiento).
                     </p>
                   </div>
 
-                  <label className="px-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 text-emerald-800 dark:text-emerald-300 font-bold cursor-pointer hover:bg-emerald-50 transition shrink-0 text-center">
-                    <span>Subir archivo .CSV / .TSV</span>
+                  <label className="px-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 text-emerald-800 dark:text-emerald-300 font-bold cursor-pointer hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition shrink-0 text-center">
+                    <span>Subir Excel / CSV</span>
                     <input
                       type="file"
-                      accept=".csv,.tsv,.txt"
+                      accept=".xlsx,.xls,.csv,.tsv,.txt,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,text/tab-separated-values"
                       className="hidden"
-                      onChange={(e) => {
+                      onChange={async (e) => {
                         const f = e.target.files?.[0];
                         if (!f) return;
-                        const reader = new FileReader();
-                        reader.onload = (ev) => {
-                          setTextoImportacion(String(ev.target?.result || ''));
-                        };
-                        reader.readAsText(f);
+                        try {
+                          const texto = await leerArchivoPlanillaATexto(f);
+                          setTextoImportacion(texto);
+                        } catch (err) {
+                          onNotificar(
+                            err instanceof Error
+                              ? `Error al leer archivo: ${err.message}`
+                              : 'No se pudo leer el archivo Excel / CSV.'
+                          );
+                        } finally {
+                          e.target.value = '';
+                        }
                       }}
                     />
                   </label>
@@ -2110,7 +2118,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   rows={5}
                   value={textoImportacion}
                   onChange={(e) => setTextoImportacion(e.target.value)}
-                  placeholder={'Nombre,Apellido,DNI,Fecha Nacimiento,Telefono,Localidad,Email,Obra Social\nJuan,Perez,32456789,1990-05-14,2931412233,Rio Colorado,juan@mail.com,IPROSS'}
+                  placeholder={'DNI\tApellido\tNombre\tDireccion\tTelefono\tFecha Nacimiento\n32456789\tPérez\tJuan Pablo\tLos Chañares 228\t2931412233\t1990-05-14'}
                   className="w-full p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-mono text-[11px]"
                 />
 
@@ -2133,6 +2141,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         </span>
                       )}
                     </div>
+
+                    {previewImportacion.errores.length > 0 && (
+                      <div className="p-3 rounded-xl bg-rose-50/80 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800/60 space-y-1.5 text-[11px] text-rose-800 dark:text-rose-300">
+                        <div className="font-bold flex items-center gap-1.5">
+                          <AlertTriangle className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400 shrink-0" />
+                          <span>Detalle de errores ({previewImportacion.errores.length} fila{previewImportacion.errores.length > 1 ? 's' : ''}):</span>
+                        </div>
+                        <ul className="space-y-1 list-disc list-inside">
+                          {previewImportacion.errores.slice(0, 3).map((err, idx) => (
+                            <li key={idx} className="break-words">
+                              <strong>Fila {err.fila}:</strong> {err.motivo}
+                            </li>
+                          ))}
+                        </ul>
+                        {previewImportacion.errores.length > 3 && (
+                          <p className="text-[10px] text-rose-600/80 dark:text-rose-400/80 italic">
+                            ...y {previewImportacion.errores.length - 3} error{previewImportacion.errores.length - 3 > 1 ? 'es' : ''} más.
+                          </p>
+                        )}
+                      </div>
+                    )}
 
                     {previewImportacion.validos.length > 0 && (
                       <div className="flex justify-end">
