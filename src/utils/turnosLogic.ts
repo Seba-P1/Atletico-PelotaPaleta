@@ -41,24 +41,25 @@ export function validarReserva(
   p2: ParejaTurno,
   organizadorNombre: string
 ): ValidacionReserva {
-  if (!p1.delantero || !p1.zaguero || !p2.delantero || !p2.zaguero) {
-    return { valido: false, error: 'Se deben completar los 4 jugadores del partido (2 delanteros y 2 zagueros).' };
+  const jugadores = [p1.delantero, p1.zaguero, p2.delantero, p2.zaguero]
+    .map((n) => (n || '').trim())
+    .filter(Boolean);
+
+  if (jugadores.length === 0) {
+    return { valido: false, error: 'Selecciona al menos 1 pelotari para reservar el turno.' };
   }
 
-  const jugadores = [
-    p1.delantero.trim(),
-    p1.zaguero.trim(),
-    p2.delantero.trim(),
-    p2.zaguero.trim()
-  ];
-
-  const unicos = new Set(jugadores);
-  if (unicos.size < 4) {
+  const unicos = new Set(jugadores.map((j) => j.toLowerCase()));
+  if (unicos.size < jugadores.length) {
     return { valido: false, error: 'No se puede repetir el mismo jugador en el mismo turno.' };
   }
 
-  if (organizadorNombre && !jugadores.includes(organizadorNombre.trim())) {
-    // Si el organizador no está en ninguna de las parejas
+  const orgLimpio = (organizadorNombre || '').trim();
+  if (
+    orgLimpio &&
+    orgLimpio.toLowerCase() !== 'a confirmar' &&
+    !unicos.has(orgLimpio.toLowerCase())
+  ) {
     return { valido: false, error: 'El organizador del turno debe ser uno de los jugadores convocados.' };
   }
 
@@ -79,8 +80,8 @@ export function calcularEstadisticasOcupacion(turnos: Record<string, Turno>) {
 export function generarMensajeWhatsAppTurno(turno: Turno, etiquetaHorario: string, fechaStr: string): string {
   const p1 = turno.p1;
   const p2 = turno.p2;
-  const p1Txt = p1 ? `🎾 *Pareja 1*: ${p1.delantero} (D) y ${p1.zaguero} (Z)` : '';
-  const p2Txt = p2 ? `🎾 *Pareja 2*: ${p2.delantero} (D) y ${p2.zaguero} (Z)` : '';
+  const p1Txt = p1 ? `🎾 *Pareja 1*: ${p1.delantero || 'A confirmar'} (D) y ${p1.zaguero || 'A confirmar'} (Z)` : '';
+  const p2Txt = p2 ? `🎾 *Pareja 2*: ${p2.delantero || 'A confirmar'} (D) y ${p2.zaguero || 'A confirmar'} (Z)` : '';
   const org = turno.organizadorNombre ? `👤 *Organiza*: ${turno.organizadorNombre}` : '';
   const notas = turno.notas ? `📝 *Notas*: ${turno.notas}` : '';
   const costo = turno.costoTotal ? `💰 *Valor*: ${formatearMoneda(turno.costoTotal)} ${turno.pagado ? '(PAGADO ✅)' : '(A abonar en cantina)'}` : '';

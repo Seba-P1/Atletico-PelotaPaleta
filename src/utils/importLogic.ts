@@ -121,8 +121,8 @@ export function normalizarFechaNacimiento(raw: string): string | undefined {
 function normalizarRol(raw: string): RolJugador {
   const r = (raw || '').toLowerCase();
   if (r.includes('zagu')) return 'Zaguero';
-  if (r.includes('amb')) return 'Ambos';
-  return 'Delantero';
+  if (r.includes('delan')) return 'Delantero';
+  return 'Ambos';
 }
 
 function normalizarCategoria(raw: string): CategoriaJugador {

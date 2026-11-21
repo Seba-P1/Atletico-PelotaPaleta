@@ -28,11 +28,38 @@ import {
 } from './authLogic';
 import { Turno, ProductoCantina, ItemPedido, MovimientoCaja, ParejaTorneo, TorneoData, Jugador } from '../types';
 
-test('validarReserva rechaza parejas incompletas', () => {
-  const p1 = { nombre: 'P1', delantero: 'Facundo Andreasen', zaguero: '' };
-  const p2 = { nombre: 'P2', delantero: 'Gabriel Villegas', zaguero: 'Alfredo Villegas' };
-  const res = validarReserva(p1, p2, 'Facundo Andreasen');
+test('validarReserva rechaza cuando los 4 puestos están vacíos (0 jugadores)', () => {
+  const p1 = { nombre: 'P1', delantero: '', zaguero: '' };
+  const p2 = { nombre: 'P2', delantero: '', zaguero: '' };
+  const res = validarReserva(p1, p2, '');
   assert.equal(res.valido, false);
+  assert.match(res.error || '', /al menos 1 pelotari/i);
+});
+
+test('validarReserva aprueba cuando hay 1, 2 o 3 jugadores sin repetidos', () => {
+  // 1 jugador
+  const r1 = validarReserva(
+    { nombre: 'P1', delantero: 'Facundo Andreasen', zaguero: '' },
+    { nombre: 'P2', delantero: '', zaguero: '' },
+    'Facundo Andreasen'
+  );
+  assert.equal(r1.valido, true);
+
+  // 2 jugadores
+  const r2 = validarReserva(
+    { nombre: 'P1', delantero: 'Facundo Andreasen', zaguero: '' },
+    { nombre: 'P2', delantero: 'Gabriel Villegas', zaguero: '' },
+    'Facundo Andreasen'
+  );
+  assert.equal(r2.valido, true);
+
+  // 3 jugadores
+  const r3 = validarReserva(
+    { nombre: 'P1', delantero: 'Facundo Andreasen', zaguero: 'Santiago Andreasen' },
+    { nombre: 'P2', delantero: 'Gabriel Villegas', zaguero: '' },
+    'Facundo Andreasen'
+  );
+  assert.equal(r3.valido, true);
 });
 
 test('validarReserva rechaza jugadores repetidos en el mismo turno', () => {
@@ -41,6 +68,14 @@ test('validarReserva rechaza jugadores repetidos en el mismo turno', () => {
   const res = validarReserva(p1, p2, 'Facundo Andreasen');
   assert.equal(res.valido, false);
   assert.match(res.error || '', /repetir el mismo jugador/);
+
+  // Repetido incluso con solo 2 jugadores
+  const res2 = validarReserva(
+    { nombre: 'P1', delantero: 'Facundo Andreasen', zaguero: '' },
+    { nombre: 'P2', delantero: 'Facundo Andreasen', zaguero: '' },
+    'Facundo Andreasen'
+  );
+  assert.equal(res2.valido, false);
 });
 
 test('validarReserva aprueba 4 jugadores distintos con organizador participante', () => {

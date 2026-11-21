@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { HorarioConfig, Jugador, Turno, ParejaTurno, MetodoPago, ClubConfig, DiaBloqueado } from '../types';
 import {
   formatearMoneda,
@@ -9,8 +9,201 @@ import {
   combinarNotasInvitado,
 } from '../utils/turnosLogic';
 import { evaluarJugadoresParaReserva } from '../utils/billingLogic';
-import { X, CheckCircle, AlertCircle, Clock, Zap, CreditCard, UserPlus, AlertTriangle, Ban } from 'lucide-react';
+import {
+  X,
+  CheckCircle,
+  AlertCircle,
+  Clock,
+  Zap,
+  CreditCard,
+  UserPlus,
+  AlertTriangle,
+  Ban,
+  Search,
+  ChevronDown,
+} from 'lucide-react';
 import confetti from 'canvas-confetti';
+
+interface SelectorPelotariProps {
+  label: string;
+  value: string;
+  onChange: (val: string) => void;
+  jugadores: Jugador[];
+  ocupadosEnOtrosPuestos: string[];
+}
+
+const SelectorPelotari: React.FC<SelectorPelotariProps> = ({
+  label,
+  value,
+  onChange,
+  jugadores,
+  ocupadosEnOtrosPuestos,
+}) => {
+  const [abierto, setAbierto] = useState(false);
+  const [busqueda, setBusqueda] = useState('');
+  const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setAbierto(false);
+      }
+    };
+    if (abierto) {
+      document.addEventListener('mousedown', handleClickOutside);
+      setTimeout(() => inputRef.current?.focus(), 50);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [abierto]);
+
+  const norm = (s: string) =>
+    (s || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim();
+
+  const queryNorm = norm(busqueda);
+  const filtrados = queryNorm
+    ? jugadores.filter((j) => norm(j.nombre).includes(queryNorm))
+    : jugadores;
+
+  const jugadorSeleccionado = jugadores.find((j) => j.nombre === value);
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 block mb-1">
+        {label}
+      </label>
+
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => setAbierto((prev) => !prev)}
+          className={`w-full bg-white dark:bg-slate-900 border rounded-lg px-2.5 py-2 text-xs flex items-center justify-between transition text-left cursor-pointer ${
+            abierto
+              ? 'border-emerald-500 ring-1 ring-emerald-500/20'
+              : 'border-slate-300 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-600'
+          }`}
+        >
+          <span className="truncate pr-4">
+            {value ? (
+              <span className="font-bold text-slate-900 dark:text-white">
+                {value}{' '}
+                {jugadorSeleccionado && (
+                  <span className="font-normal text-[11px] text-slate-500 dark:text-slate-400">
+                    ({jugadorSeleccionado.categoria || 'Prom'} · {jugadorSeleccionado.rol || 'Ambos'})
+                  </span>
+                )}
+              </span>
+            ) : (
+              <span className="italic text-slate-400 dark:text-slate-500">
+                Por definir / A confirmar
+              </span>
+            )}
+          </span>
+
+          <div className="flex items-center gap-1 shrink-0 text-slate-400">
+            {value && (
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onChange('');
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.stopPropagation();
+                    onChange('');
+                  }
+                }}
+                title="Limpiar selección"
+                className="p-0.5 rounded hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-rose-500 transition cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </span>
+            )}
+            <ChevronDown className={`w-3.5 h-3.5 transition-transform ${abierto ? 'rotate-180' : ''}`} />
+          </div>
+        </button>
+
+        {abierto && (
+          <div className="absolute left-0 right-0 top-full mt-1 z-40 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xl p-2 space-y-1 text-xs">
+            <div className="relative mb-1">
+              <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400 pointer-events-none" />
+              <input
+                ref={inputRef}
+                type="text"
+                value={busqueda}
+                onChange={(e) => setBusqueda(e.target.value)}
+                placeholder="Buscar pelotari..."
+                className="w-full pl-8 pr-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white focus:outline-hidden focus:border-emerald-500 placeholder-slate-400"
+              />
+            </div>
+
+            <div className="max-h-48 overflow-y-auto space-y-0.5 divide-y divide-slate-100 dark:divide-slate-800/50">
+              <button
+                type="button"
+                onClick={() => {
+                  onChange('');
+                  setAbierto(false);
+                  setBusqueda('');
+                }}
+                className={`w-full text-left px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition cursor-pointer flex items-center justify-between ${
+                  !value
+                    ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300'
+                    : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'
+                }`}
+              >
+                <span>— Por definir / A confirmar (dejar libre) —</span>
+                {!value && <CheckCircle className="w-3 h-3 text-emerald-600 dark:text-emerald-400 shrink-0" />}
+              </button>
+
+              <div className="pt-0.5 space-y-0.5">
+                {filtrados.length === 0 ? (
+                  <div className="p-2 text-center text-[11px] text-slate-400 italic">
+                    No se encontraron pelotaris
+                  </div>
+                ) : (
+                  filtrados.map((j) => {
+                    const ocupado = ocupadosEnOtrosPuestos.includes(j.nombre);
+                    const seleccionado = value === j.nombre;
+                    return (
+                      <button
+                        key={j.id}
+                        type="button"
+                        disabled={ocupado}
+                        onClick={() => {
+                          onChange(j.nombre);
+                          setAbierto(false);
+                          setBusqueda('');
+                        }}
+                        className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-between transition ${
+                          seleccionado
+                            ? 'bg-emerald-100 dark:bg-emerald-900/60 text-emerald-900 dark:text-emerald-100 font-bold'
+                            : ocupado
+                            ? 'opacity-40 cursor-not-allowed bg-slate-100/50 dark:bg-slate-800/40 text-slate-400'
+                            : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 cursor-pointer'
+                        }`}
+                      >
+                        <span className="truncate">{j.nombre}</span>
+                        <span className="text-[10px] opacity-75 shrink-0 ml-2">
+                          {ocupado ? '(Ya elegido)' : `(${j.categoria || 'Prom'} · ${j.rol || 'Ambos'})`}
+                        </span>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
 
 interface ReservaModalProps {
   horario: HorarioConfig;
@@ -40,32 +233,32 @@ export const ReservaModal: React.FC<ReservaModalProps> = ({
   onCerrar,
 }) => {
   const activos = jugadores.filter((j) => j.activo);
-  const delanteros = activos.filter((j) => j.rol === 'Delantero' || j.rol === 'Ambos');
-  const zagueros = activos.filter((j) => j.rol === 'Zaguero' || j.rol === 'Ambos');
+  const pelotarisOrdenados = [...activos].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
 
-  const usuarioEnDelanteros = delanteros.find((d) => d.nombre === usuarioActual)?.nombre;
-  const usuarioEnZagueros = zagueros.find((z) => z.nombre === usuarioActual)?.nombre;
+  // Identificar al usuario logueado en activos
+  const jugadorUsuario =
+    jugadorLogueado ||
+    activos.find((j) => j.nombre.toLowerCase() === (usuarioActual || '').toLowerCase()) ||
+    activos.find((j) => usuarioActual && j.nombre.toLowerCase().includes(usuarioActual.toLowerCase()));
 
+  const nombreUsuario =
+    jugadorUsuario?.nombre ||
+    (usuarioActual && usuarioActual !== 'admin' && usuarioActual !== 'cantina' ? usuarioActual : '');
+  const rolUsuario = jugadorUsuario?.rol || 'Delantero';
+  const esZagueroNatural = rolUsuario === 'Zaguero';
+
+  // Ubicar automáticamente solo al usuario logueado en su puesto natural.
+  // Los otros 3 puestos se inicializan en "" (Por definir / A confirmar).
   const [p1Delantero, setP1Delantero] = useState<string>(
-    usuarioEnDelanteros || delanteros[0]?.nombre || ''
+    !esZagueroNatural && nombreUsuario ? nombreUsuario : ''
   );
   const [p1Zaguero, setP1Zaguero] = useState<string>(
-    (!usuarioEnDelanteros && usuarioEnZagueros) || zagueros[0]?.nombre || ''
+    esZagueroNatural && nombreUsuario ? nombreUsuario : ''
   );
-  const [p2Delantero, setP2Delantero] = useState<string>(
-    delanteros.find((d) => d.nombre !== (usuarioEnDelanteros || delanteros[0]?.nombre))?.nombre ||
-      delanteros[0]?.nombre ||
-      ''
-  );
-  const [p2Zaguero, setP2Zaguero] = useState<string>(
-    zagueros.find((z) => z.nombre !== ((!usuarioEnDelanteros && usuarioEnZagueros) || zagueros[0]?.nombre))?.nombre ||
-      zagueros[0]?.nombre ||
-      ''
-  );
+  const [p2Delantero, setP2Delantero] = useState<string>('');
+  const [p2Zaguero, setP2Zaguero] = useState<string>('');
 
-  const [organizador, setOrganizador] = useState<string>(
-    usuarioEnDelanteros || usuarioEnZagueros || delanteros[0]?.nombre || usuarioActual || ''
-  );
+  const [organizador, setOrganizador] = useState<string>(nombreUsuario);
   const [notas, setNotas] = useState<string>('');
   const [incluirInvitado, setIncluirInvitado] = useState<boolean>(false);
   const [invitadoPuesto, setInvitadoPuesto] = useState<'p2Zag' | 'p2Del' | 'p1Zag' | 'p1Del'>('p2Zag');
@@ -74,20 +267,6 @@ export const ReservaModal: React.FC<ReservaModalProps> = ({
   const [pagarAhora, setPagarAhora] = useState<boolean>(false);
   const [metodoPago, setMetodoPago] = useState<MetodoPago>('efectivo');
   const [errorMsg, setErrorMsg] = useState<string>('');
-
-  useEffect(() => {
-    if (!p1Delantero && delanteros[0]?.nombre) setP1Delantero(delanteros[0].nombre);
-    if (!p1Zaguero && zagueros[0]?.nombre) setP1Zaguero(zagueros[0].nombre);
-    if (!p2Delantero && (delanteros[1]?.nombre || delanteros[0]?.nombre)) {
-      setP2Delantero(delanteros[1]?.nombre || delanteros[0]?.nombre || '');
-    }
-    if (!p2Zaguero && (zagueros[1]?.nombre || zagueros[0]?.nombre)) {
-      setP2Zaguero(zagueros[1]?.nombre || zagueros[0]?.nombre || '');
-    }
-    if (!organizador && (usuarioEnDelanteros || usuarioEnZagueros || delanteros[0]?.nombre)) {
-      setOrganizador(usuarioEnDelanteros || usuarioEnZagueros || delanteros[0]?.nombre || '');
-    }
-  }, [jugadores.length]);
 
   const costoTotal = horario.precioCancha + horario.precioLuz;
 
@@ -145,21 +324,25 @@ export const ReservaModal: React.FC<ReservaModalProps> = ({
       obsInvitados.push(formatearObservacionInvitado(nombreInv, invitadoObs));
     }
 
+    const etiquetaCorto = (n: string) => (n ? n.trim().split(/\s+/).slice(-1)[0] || n.trim() : 'A confirmar');
+    const jugadoresElegidos = [p1DelFinal, p1ZagFinal, p2DelFinal, p2ZagFinal]
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const orgFinal = jugadoresElegidos.includes(organizador)
+      ? organizador
+      : (jugadoresElegidos[0] || '');
+
     const p1: ParejaTurno = {
-      nombre: `Pareja 1 (${p1DelFinal.split(' ')[1] || p1DelFinal} - ${p1ZagFinal.split(' ')[1] || p1ZagFinal})`,
+      nombre: `Pareja 1 (${etiquetaCorto(p1DelFinal)} - ${etiquetaCorto(p1ZagFinal)})`,
       delantero: p1DelFinal,
       zaguero: p1ZagFinal,
     };
 
     const p2: ParejaTurno = {
-      nombre: `Pareja 2 (${p2DelFinal.split(' ')[1] || p2DelFinal} - ${p2ZagFinal.split(' ')[1] || p2ZagFinal})`,
+      nombre: `Pareja 2 (${etiquetaCorto(p2DelFinal)} - ${etiquetaCorto(p2ZagFinal)})`,
       delantero: p2DelFinal,
       zaguero: p2ZagFinal,
     };
-
-    const orgFinal = [p1.delantero, p1.zaguero, p2.delantero, p2.zaguero].includes(organizador)
-      ? organizador
-      : p1.delantero;
 
     const validacion = validarReserva(p1, p2, orgFinal);
     if (!validacion.valido) {
@@ -311,17 +494,9 @@ export const ReservaModal: React.FC<ReservaModalProps> = ({
         )}
 
         {onAbrirRegistroJugador && (
-          <div
-            className={`p-3 rounded-xl border text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 ${
-              activos.length < 4
-                ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200'
-                : 'bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/60 text-emerald-900 dark:text-emerald-200'
-            }`}
-          >
+          <div className="p-3 rounded-xl border text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/60 text-emerald-900 dark:text-emerald-200">
             <span>
-              {activos.length < 4
-                ? `Hay ${activos.length} pelotari(s) registrado(s). Se necesitan al menos 4 pelotaris para armar un partido.`
-                : '¿Falta alguno de los pelotaris en la lista?'}
+              Podés reservar con 1, 2, 3 o los 4 pelotaris (dejando los puestos restantes &quot;A confirmar&quot;). ¿Falta registrar a alguien en el padrón?
             </span>
             <button
               type="button"
@@ -341,38 +516,20 @@ export const ReservaModal: React.FC<ReservaModalProps> = ({
               Pareja 1 (Titulares)
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 block mb-1">
-                  Delantero 1:
-                </label>
-                <select
-                  value={p1Delantero}
-                  onChange={(e) => setP1Delantero(e.target.value)}
-                  className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-2 text-xs text-slate-900 dark:text-white focus:outline-hidden focus:border-emerald-500 font-medium"
-                >
-                  {delanteros.map((j) => (
-                    <option key={j.id} value={j.nombre}>
-                      {j.nombre} ({j.categoria})
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 block mb-1">
-                  Zaguero 1:
-                </label>
-                <select
-                  value={p1Zaguero}
-                  onChange={(e) => setP1Zaguero(e.target.value)}
-                  className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-2 text-xs text-slate-900 dark:text-white focus:outline-hidden focus:border-emerald-500 font-medium"
-                >
-                  {zagueros.map((j) => (
-                    <option key={j.id} value={j.nombre}>
-                      {j.nombre} ({j.categoria})
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <SelectorPelotari
+                label="Delantero 1:"
+                value={p1Delantero}
+                onChange={setP1Delantero}
+                jugadores={pelotarisOrdenados}
+                ocupadosEnOtrosPuestos={[p1Zaguero, p2Delantero, p2Zaguero].filter(Boolean)}
+              />
+              <SelectorPelotari
+                label="Zaguero 1:"
+                value={p1Zaguero}
+                onChange={setP1Zaguero}
+                jugadores={pelotarisOrdenados}
+                ocupadosEnOtrosPuestos={[p1Delantero, p2Delantero, p2Zaguero].filter(Boolean)}
+              />
             </div>
           </div>
 
@@ -382,38 +539,20 @@ export const ReservaModal: React.FC<ReservaModalProps> = ({
               Pareja 2 (Rivales)
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 block mb-1">
-                  Delantero 2:
-                </label>
-                <select
-                  value={p2Delantero}
-                  onChange={(e) => setP2Delantero(e.target.value)}
-                  className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-2 text-xs text-slate-900 dark:text-white focus:outline-hidden focus:border-emerald-500 font-medium"
-                >
-                  {delanteros.map((j) => (
-                    <option key={j.id} value={j.nombre}>
-                      {j.nombre} ({j.categoria})
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 block mb-1">
-                  Zaguero 2:
-                </label>
-                <select
-                  value={p2Zaguero}
-                  onChange={(e) => setP2Zaguero(e.target.value)}
-                  className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-2 text-xs text-slate-900 dark:text-white focus:outline-hidden focus:border-emerald-500 font-medium"
-                >
-                  {zagueros.map((j) => (
-                    <option key={j.id} value={j.nombre}>
-                      {j.nombre} ({j.categoria})
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <SelectorPelotari
+                label="Delantero 2:"
+                value={p2Delantero}
+                onChange={setP2Delantero}
+                jugadores={pelotarisOrdenados}
+                ocupadosEnOtrosPuestos={[p1Delantero, p1Zaguero, p2Zaguero].filter(Boolean)}
+              />
+              <SelectorPelotari
+                label="Zaguero 2:"
+                value={p2Zaguero}
+                onChange={setP2Zaguero}
+                jugadores={pelotarisOrdenados}
+                ocupadosEnOtrosPuestos={[p1Delantero, p1Zaguero, p2Delantero].filter(Boolean)}
+              />
             </div>
           </div>
 
@@ -423,16 +562,32 @@ export const ReservaModal: React.FC<ReservaModalProps> = ({
               <label className="font-semibold text-slate-600 dark:text-slate-400 block mb-1">
                 Organizador del Turno:
               </label>
-              <select
-                value={organizador}
-                onChange={(e) => setOrganizador(e.target.value)}
-                className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-2 text-slate-900 dark:text-white font-medium"
-              >
-                <option value={p1Delantero}>Delantero 1 ({p1Delantero})</option>
-                <option value={p1Zaguero}>Zaguero 1 ({p1Zaguero})</option>
-                <option value={p2Delantero}>Delantero 2 ({p2Delantero})</option>
-                <option value={p2Zaguero}>Zaguero 2 ({p2Zaguero})</option>
-              </select>
+              {(() => {
+                const puestosConJugador = [
+                  { puesto: 'Delantero 1', nombre: p1Delantero },
+                  { puesto: 'Zaguero 1', nombre: p1Zaguero },
+                  { puesto: 'Delantero 2', nombre: p2Delantero },
+                  { puesto: 'Zaguero 2', nombre: p2Zaguero },
+                ].filter((p) => p.nombre.trim() !== '');
+
+                return (
+                  <select
+                    value={organizador}
+                    onChange={(e) => setOrganizador(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-2 text-slate-900 dark:text-white font-medium"
+                  >
+                    {puestosConJugador.length === 0 ? (
+                      <option value="">Se asignará el primer jugador elegido</option>
+                    ) : (
+                      puestosConJugador.map((p) => (
+                        <option key={p.puesto} value={p.nombre}>
+                          {p.puesto} ({p.nombre})
+                        </option>
+                      ))
+                    )}
+                  </select>
+                );
+              })()}
             </div>
             <div>
               <label className="font-semibold text-slate-600 dark:text-slate-400 block mb-1">

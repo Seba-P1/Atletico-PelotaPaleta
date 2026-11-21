@@ -81,8 +81,9 @@ export const DetalleTurnoModal: React.FC<DetalleTurnoModalProps> = ({
   const p1 = turno.p1;
   const p2 = turno.p2;
   const jugadoresActivos = jugadores.filter((j) => j.activo);
-  const delanteros = jugadoresActivos.filter((j) => j.rol === 'Delantero' || j.rol === 'Ambos');
-  const zagueros = jugadoresActivos.filter((j) => j.rol === 'Zaguero' || j.rol === 'Ambos');
+  const pelotarisOrdenados = [...jugadoresActivos].sort((a, b) =>
+    a.nombre.localeCompare(b.nombre, 'es')
+  );
 
   const guardarScore = (e: React.FormEvent) => {
     e.preventDefault();
@@ -112,23 +113,26 @@ export const DetalleTurnoModal: React.FC<DetalleTurnoModalProps> = ({
       }
     }
 
+    const etiquetaCorto = (n: string) => (n ? n.trim().split(/\s+/).slice(-1)[0] || n.trim() : 'A confirmar');
+    const jugadoresElegidos = [p1Del, p1Zag, p2Del, p2Zag].map((s) => s.trim()).filter(Boolean);
+    const orgFinal = jugadoresElegidos.includes(editOrg)
+      ? editOrg
+      : (jugadoresElegidos[0] || '');
+
     const nuevaP1: ParejaTurno = {
-      nombre: `Pareja 1 (${p1Del.split(' ')[1] || p1Del} - ${p1Zag.split(' ')[1] || p1Zag})`,
+      nombre: `Pareja 1 (${etiquetaCorto(p1Del)} - ${etiquetaCorto(p1Zag)})`,
       delantero: p1Del,
       zaguero: p1Zag,
     };
     const nuevaP2: ParejaTurno = {
-      nombre: `Pareja 2 (${p2Del.split(' ')[1] || p2Del} - ${p2Zag.split(' ')[1] || p2Zag})`,
+      nombre: `Pareja 2 (${etiquetaCorto(p2Del)} - ${etiquetaCorto(p2Zag)})`,
       delantero: p2Del,
       zaguero: p2Zag,
     };
-    const orgFinal = [p1Del, p1Zag, p2Del, p2Zag].includes(editOrg)
-      ? editOrg
-      : p1Del;
 
     const validacion = validarReserva(nuevaP1, nuevaP2, orgFinal);
     if (!validacion.valido) {
-      setErrorEdicion(validacion.error || 'Verifica los 4 jugadores seleccionados.');
+      setErrorEdicion(validacion.error || 'Verifica los jugadores seleccionados.');
       return;
     }
 
@@ -188,64 +192,104 @@ export const DetalleTurnoModal: React.FC<DetalleTurnoModalProps> = ({
             <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-2">
               <div className="font-bold text-emerald-700 dark:text-emerald-400 uppercase">Pareja 1</div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <select
-                  value={editP1Del}
-                  onChange={(e) => setEditP1Del(e.target.value)}
-                  className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 font-medium"
-                >
-                  {delanteros.map((j) => (
-                    <option key={j.id} value={j.nombre}>{j.nombre} (D)</option>
-                  ))}
-                </select>
-                <select
-                  value={editP1Zag}
-                  onChange={(e) => setEditP1Zag(e.target.value)}
-                  className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 font-medium"
-                >
-                  {zagueros.map((j) => (
-                    <option key={j.id} value={j.nombre}>{j.nombre} (Z)</option>
-                  ))}
-                </select>
+                <div>
+                  <label className="text-[11px] text-slate-500 block mb-0.5">Delantero 1:</label>
+                  <select
+                    value={editP1Del}
+                    onChange={(e) => setEditP1Del(e.target.value)}
+                    className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 font-medium"
+                  >
+                    <option value="">— Por definir / A confirmar —</option>
+                    {pelotarisOrdenados.map((j) => (
+                      <option key={j.id} value={j.nombre}>
+                        {j.nombre} ({j.categoria || 'Prom'} · {j.rol || 'Ambos'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[11px] text-slate-500 block mb-0.5">Zaguero 1:</label>
+                  <select
+                    value={editP1Zag}
+                    onChange={(e) => setEditP1Zag(e.target.value)}
+                    className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 font-medium"
+                  >
+                    <option value="">— Por definir / A confirmar —</option>
+                    {pelotarisOrdenados.map((j) => (
+                      <option key={j.id} value={j.nombre}>
+                        {j.nombre} ({j.categoria || 'Prom'} · {j.rol || 'Ambos'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
 
             <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-2">
               <div className="font-bold text-slate-700 dark:text-slate-300 uppercase">Pareja 2</div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <select
-                  value={editP2Del}
-                  onChange={(e) => setEditP2Del(e.target.value)}
-                  className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 font-medium"
-                >
-                  {delanteros.map((j) => (
-                    <option key={j.id} value={j.nombre}>{j.nombre} (D)</option>
-                  ))}
-                </select>
-                <select
-                  value={editP2Zag}
-                  onChange={(e) => setEditP2Zag(e.target.value)}
-                  className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 font-medium"
-                >
-                  {zagueros.map((j) => (
-                    <option key={j.id} value={j.nombre}>{j.nombre} (Z)</option>
-                  ))}
-                </select>
+                <div>
+                  <label className="text-[11px] text-slate-500 block mb-0.5">Delantero 2:</label>
+                  <select
+                    value={editP2Del}
+                    onChange={(e) => setEditP2Del(e.target.value)}
+                    className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 font-medium"
+                  >
+                    <option value="">— Por definir / A confirmar —</option>
+                    {pelotarisOrdenados.map((j) => (
+                      <option key={j.id} value={j.nombre}>
+                        {j.nombre} ({j.categoria || 'Prom'} · {j.rol || 'Ambos'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[11px] text-slate-500 block mb-0.5">Zaguero 2:</label>
+                  <select
+                    value={editP2Zag}
+                    onChange={(e) => setEditP2Zag(e.target.value)}
+                    className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 font-medium"
+                  >
+                    <option value="">— Por definir / A confirmar —</option>
+                    {pelotarisOrdenados.map((j) => (
+                      <option key={j.id} value={j.nombre}>
+                        {j.nombre} ({j.categoria || 'Prom'} · {j.rol || 'Ambos'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div>
                 <label className="font-semibold text-slate-600 dark:text-slate-400 block mb-1">Organizador:</label>
-                <select
-                  value={editOrg}
-                  onChange={(e) => setEditOrg(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5"
-                >
-                  <option value={editP1Del}>{editP1Del}</option>
-                  <option value={editP1Zag}>{editP1Zag}</option>
-                  <option value={editP2Del}>{editP2Del}</option>
-                  <option value={editP2Zag}>{editP2Zag}</option>
-                </select>
+                {(() => {
+                  const puestosConJugador = [
+                    { label: `Delantero 1 (${editP1Del})`, val: editP1Del },
+                    { label: `Zaguero 1 (${editP1Zag})`, val: editP1Zag },
+                    { label: `Delantero 2 (${editP2Del})`, val: editP2Del },
+                    { label: `Zaguero 2 (${editP2Zag})`, val: editP2Zag },
+                  ].filter((p) => p.val.trim() !== '');
+
+                  return (
+                    <select
+                      value={editOrg}
+                      onChange={(e) => setEditOrg(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5"
+                    >
+                      {puestosConJugador.length === 0 ? (
+                        <option value="">— Sin jugadores definidos —</option>
+                      ) : (
+                        puestosConJugador.map((p) => (
+                          <option key={p.label} value={p.val}>
+                            {p.label}
+                          </option>
+                        ))
+                      )}
+                    </select>
+                  );
+                })()}
               </div>
               <div>
                 <label className="font-semibold text-slate-600 dark:text-slate-400 block mb-1">Notas:</label>
@@ -314,13 +358,29 @@ export const DetalleTurnoModal: React.FC<DetalleTurnoModalProps> = ({
                     <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-semibold">
                       Delantero:
                     </span>
-                    <span className="font-bold text-slate-900 dark:text-white">{p1?.delantero}</span>
+                    <span
+                      className={
+                        p1?.delantero
+                          ? 'font-bold text-slate-900 dark:text-white'
+                          : 'italic text-slate-400 dark:text-slate-500'
+                      }
+                    >
+                      {p1?.delantero || 'A confirmar'}
+                    </span>
                   </div>
                   <div className="bg-white dark:bg-slate-900 p-2 rounded-lg border border-slate-200 dark:border-slate-800">
                     <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-semibold">
                       Zaguero:
                     </span>
-                    <span className="font-bold text-slate-900 dark:text-white">{p1?.zaguero}</span>
+                    <span
+                      className={
+                        p1?.zaguero
+                          ? 'font-bold text-slate-900 dark:text-white'
+                          : 'italic text-slate-400 dark:text-slate-500'
+                      }
+                    >
+                      {p1?.zaguero || 'A confirmar'}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -334,13 +394,29 @@ export const DetalleTurnoModal: React.FC<DetalleTurnoModalProps> = ({
                     <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-semibold">
                       Delantero:
                     </span>
-                    <span className="font-bold text-slate-900 dark:text-white">{p2?.delantero}</span>
+                    <span
+                      className={
+                        p2?.delantero
+                          ? 'font-bold text-slate-900 dark:text-white'
+                          : 'italic text-slate-400 dark:text-slate-500'
+                      }
+                    >
+                      {p2?.delantero || 'A confirmar'}
+                    </span>
                   </div>
                   <div className="bg-white dark:bg-slate-900 p-2 rounded-lg border border-slate-200 dark:border-slate-800">
                     <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-semibold">
                       Zaguero:
                     </span>
-                    <span className="font-bold text-slate-900 dark:text-white">{p2?.zaguero}</span>
+                    <span
+                      className={
+                        p2?.zaguero
+                          ? 'font-bold text-slate-900 dark:text-white'
+                          : 'italic text-slate-400 dark:text-slate-500'
+                      }
+                    >
+                      {p2?.zaguero || 'A confirmar'}
+                    </span>
                   </div>
                 </div>
               </div>

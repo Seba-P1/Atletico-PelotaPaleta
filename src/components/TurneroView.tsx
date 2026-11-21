@@ -671,7 +671,25 @@ export const TurneroView: React.FC<TurneroViewProps> = ({
                             <span>Inactivo</span>
                           </span>
                         ) : ocupado ? (
-                          <span className="text-slate-700 dark:text-slate-300">Ocupado</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-slate-700 dark:text-slate-300">Ocupado</span>
+                            {turno?.p1 && turno?.p2 && (() => {
+                              const completos = [
+                                turno.p1.delantero,
+                                turno.p1.zaguero,
+                                turno.p2.delantero,
+                                turno.p2.zaguero,
+                              ].map((s) => (s || '').trim()).filter(Boolean).length;
+                              if (completos < 4) {
+                                return (
+                                  <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/60 px-1.5 py-0.5 rounded-md border border-amber-200 dark:border-amber-800/60">
+                                    {completos}/4 jugadores
+                                  </span>
+                                );
+                              }
+                              return null;
+                            })()}
+                          </div>
                         ) : mantenimiento ? (
                           <span className="text-slate-600 dark:text-slate-400 flex items-center gap-1">
                             <Lock className="w-3 h-3" />
@@ -692,8 +710,26 @@ export const TurneroView: React.FC<TurneroViewProps> = ({
                               Pareja 1
                             </div>
                             <div className="text-slate-900 dark:text-white font-medium">
-                              <span className="font-bold">{turno.p1.delantero}</span> (D) /{' '}
-                              <span className="font-bold">{turno.p1.zaguero}</span> (Z)
+                              <span
+                                className={
+                                  turno.p1.delantero
+                                    ? 'font-bold'
+                                    : 'italic text-slate-400 dark:text-slate-500'
+                                }
+                              >
+                                {turno.p1.delantero || 'A confirmar'}
+                              </span>{' '}
+                              (D) /{' '}
+                              <span
+                                className={
+                                  turno.p1.zaguero
+                                    ? 'font-bold'
+                                    : 'italic text-slate-400 dark:text-slate-500'
+                                }
+                              >
+                                {turno.p1.zaguero || 'A confirmar'}
+                              </span>{' '}
+                              (Z)
                             </div>
                           </div>
 
@@ -702,8 +738,26 @@ export const TurneroView: React.FC<TurneroViewProps> = ({
                               Pareja 2
                             </div>
                             <div className="text-slate-900 dark:text-white font-medium">
-                              <span className="font-bold">{turno.p2.delantero}</span> (D) /{' '}
-                              <span className="font-bold">{turno.p2.zaguero}</span> (Z)
+                              <span
+                                className={
+                                  turno.p2.delantero
+                                    ? 'font-bold'
+                                    : 'italic text-slate-400 dark:text-slate-500'
+                                }
+                              >
+                                {turno.p2.delantero || 'A confirmar'}
+                              </span>{' '}
+                              (D) /{' '}
+                              <span
+                                className={
+                                  turno.p2.zaguero
+                                    ? 'font-bold'
+                                    : 'italic text-slate-400 dark:text-slate-500'
+                                }
+                              >
+                                {turno.p2.zaguero || 'A confirmar'}
+                              </span>{' '}
+                              (Z)
                             </div>
                           </div>
 
