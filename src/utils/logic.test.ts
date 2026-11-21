@@ -21,6 +21,7 @@ import {
   filtrarMovimientosPorFecha
 } from './cantinaLogic';
 import { construirZonasYPartidos, registrarResultadoPartido } from './torneoLogic';
+import { construirEmailRedirectUrl, parsearRetornoConfirmacionEmail } from './authLogic';
 import { Turno, ProductoCantina, ItemPedido, MovimientoCaja, ParejaTorneo, TorneoData, Jugador } from '../types';
 
 test('validarReserva rechaza parejas incompletas', () => {
@@ -992,6 +993,39 @@ test('metricsLogic: evita doble conteo en movimientos cantina sin comandaId que 
   assert.equal(opCantinera?.accionesCantina, 3);
   assert.equal(opCantinera?.accionesTurnos, 1);
 });
+
+test('authLogic: construirEmailRedirectUrl y parsearRetornoConfirmacionEmail detectan confirmación, error y recuperación', () => {
+  assert.equal(
+    construirEmailRedirectUrl('https://carc-pelota.netlify.app/'),
+    'https://carc-pelota.netlify.app/?confirmado=1'
+  );
+  assert.equal(construirEmailRedirectUrl(''), '/?confirmado=1');
+
+  assert.equal(parsearRetornoConfirmacionEmail('?confirmado=1', '').status, 'confirmed');
+  assert.equal(parsearRetornoConfirmacionEmail('?code=abc-123', '').status, 'confirmed');
+  assert.equal(
+    parsearRetornoConfirmacionEmail('', '#access_token=jwt&type=signup').status,
+    'confirmed'
+  );
+
+  // Recuperación de contraseña no debe abrir modal de registro confirmado
+  assert.equal(
+    parsearRetornoConfirmacionEmail('', '#access_token=jwt&type=recovery').status,
+    'none'
+  );
+
+  // URL limpia no dispara nada
+  assert.equal(parsearRetornoConfirmacionEmail('', '').status, 'none');
+
+  // Error de link expirado devuelve mensaje amigable en español
+  const errRes = parsearRetornoConfirmacionEmail(
+    '?error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired',
+    ''
+  );
+  assert.equal(errRes.status, 'error');
+  assert.match(errRes.mensajeError || '', /venció/i);
+});
+
 
 
 

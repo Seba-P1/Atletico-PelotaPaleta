@@ -31,6 +31,7 @@ export const STORAGE_KEYS = {
   ACCESS_CODES: 'carc_access_codes_v1',
   LOCAL_AUTH: 'carc_local_auth_v1',
   LOCAL_SESSION: 'carc_local_session_v1',
+  PENDING_ACCESS_CODE: 'carc_pending_access_code_v1',
   CLUB_CONFIG: 'carc_club_config_v3',
   MODO_MESAS: 'carc_modo_mesas',
   DIAS_BLOQUEADOS: 'carc_dias_bloqueados_v1',
@@ -262,6 +263,32 @@ export const storageService = {
     } else {
       localStorage.setItem(STORAGE_KEYS.LOCAL_SESSION, JSON.stringify(session));
     }
+  },
+
+  savePendingAccessCode(email: string, codigo: string): void {
+    const emailNorm = email.trim().toLowerCase();
+    const codigoNorm = codigo.trim().toUpperCase();
+    if (!emailNorm || !codigoNorm) return;
+    localStorage.setItem(
+      STORAGE_KEYS.PENDING_ACCESS_CODE,
+      JSON.stringify({ email: emailNorm, codigo: codigoNorm })
+    );
+  },
+
+  loadPendingAccessCode(email?: string | null): string | null {
+    const saved = safeParseJson<{ email?: string; codigo?: string } | null>(
+      localStorage.getItem(STORAGE_KEYS.PENDING_ACCESS_CODE),
+      null
+    );
+    if (!saved?.codigo) return null;
+    if (email && saved.email && saved.email.trim().toLowerCase() !== email.trim().toLowerCase()) {
+      return null;
+    }
+    return saved.codigo;
+  },
+
+  clearPendingAccessCode(): void {
+    localStorage.removeItem(STORAGE_KEYS.PENDING_ACCESS_CODE);
   },
 };
 

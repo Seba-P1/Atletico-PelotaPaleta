@@ -14,6 +14,10 @@ import {
 import { LoginModal } from './components/LoginModal';
 import { JugadorPerfilModal } from './components/JugadorPerfilModal';
 import { MobileBottomNav, SocioTabActivo } from './components/MobileBottomNav';
+import {
+  ConfirmacionRegistroModal,
+  ConfirmacionRegistroState,
+} from './components/ConfirmacionRegistroModal';
 
 import {
   Jugador,
@@ -51,6 +55,7 @@ import {
   resolverCodigoAcceso,
   AccessCodesConfig,
   DEFAULT_ACCESS_CODES,
+  parsearRetornoConfirmacionEmail,
 } from './utils/authLogic';
 import {
   evaluarEstadoFinancieroJugador,
@@ -394,14 +399,61 @@ export default function App() {
     [supabaseConfigurado, permisos.esSuperAdmin]
   );
 
+  const retornoEmailRef = useRef(
+    typeof window !== 'undefined'
+      ? parsearRetornoConfirmacionEmail(window.location.search, window.location.hash)
+      : { status: 'none' as const }
+  );
+  const [confirmacionRegistroModal, setConfirmacionRegistroModal] =
+    useState<ConfirmacionRegistroState | null>(null);
+
+  useEffect(() => {
+    if (supabaseConfigurado) return;
+    const ret = retornoEmailRef.current;
+    if (ret.status === 'none') return;
+    retornoEmailRef.current = { status: 'none' };
+    window.history.replaceState(null, '', window.location.pathname || '/');
+    if (ret.status === 'error') {
+      setConfirmacionRegistroModal({
+        estado: 'error',
+        mensajeError: ret.mensajeError,
+      });
+    } else {
+      setConfirmacionRegistroModal({
+        estado: 'confirmado',
+        nombre: usuarioAutenticado ? nombreUsuario : undefined,
+        email: sessionEmail || undefined,
+        rolAcceso,
+        usuarioAutenticado,
+      });
+    }
+  }, [supabaseConfigurado, usuarioAutenticado, nombreUsuario, sessionEmail, rolAcceso]);
+
   useEffect(() => {
     if (!supabaseConfigurado) return;
 
     let activo = true;
     const aplicarSesionSupabase = async () => {
-      const session = await supabaseRepository.getCurrentSession();
-      if (!activo) return;
+      let session = await supabaseRepository.getCurrentSession();
+      if (!activo) return null;
       if (session) {
+        const codigoPendiente = storageService.loadPendingAccessCode(session.email);
+        if (codigoPendiente) {
+          try {
+            const upd = await supabaseRepository.canjearCodigoAccesoRpc(
+              codigoPendiente,
+              session.nombreMostrado
+            );
+            if (upd) {
+              session = upd;
+            }
+          } catch (err) {
+            console.error('Error canjeando código pendiente de acceso:', err);
+          } finally {
+            storageService.clearPendingAccessCode();
+          }
+        }
+
         setUsuarioAutenticado(true);
         setNombreUsuario(session.nombreMostrado);
         setSessionEmail(session.email || null);
@@ -410,18 +462,40 @@ export default function App() {
         if (session.rolAcceso === 'super_admin' || session.rolAcceso === 'cantinero') {
           await cargarDatosAdmin(session.rolAcceso === 'super_admin');
         }
+        return session;
       } else {
         setUsuarioAutenticado(false);
         setRolAcceso('guest');
         setAdminEmail(null);
         setSessionEmail(null);
         setNombreUsuario('Socio Pelotari');
+        return null;
       }
     };
 
     const inicializar = async () => {
       await cargarDatosPublicos();
-      await aplicarSesionSupabase();
+      const sessionRes = await aplicarSesionSupabase();
+
+      const ret = retornoEmailRef.current;
+      if (ret.status !== 'none') {
+        retornoEmailRef.current = { status: 'none' };
+        window.history.replaceState(null, '', window.location.pathname || '/');
+        if (ret.status === 'error') {
+          setConfirmacionRegistroModal({
+            estado: 'error',
+            mensajeError: ret.mensajeError,
+          });
+        } else {
+          setConfirmacionRegistroModal({
+            estado: 'confirmado',
+            nombre: sessionRes ? sessionRes.nombreMostrado : undefined,
+            email: sessionRes?.email || undefined,
+            rolAcceso: sessionRes?.rolAcceso || 'jugador',
+            usuarioAutenticado: Boolean(sessionRes),
+          });
+        }
+      }
     };
     void inicializar();
 
@@ -536,7 +610,24 @@ export default function App() {
   // Ingreso unificado (Jugadores + detección automática de Comisión Directiva / Cantina)
   const handleIniciarSesion = async (emailOIdentificador: string, password: string) => {
     if (supabaseConectado) {
-      const session = await supabaseRepository.signInWithCredentials(emailOIdentificador, password);
+      let session = await supabaseRepository.signInWithCredentials(emailOIdentificador, password);
+      const codigoPendiente = storageService.loadPendingAccessCode(session.email);
+      if (codigoPendiente) {
+        try {
+          const upd = await supabaseRepository.canjearCodigoAccesoRpc(
+            codigoPendiente,
+            session.nombreMostrado
+          );
+          if (upd) {
+            session = upd;
+          }
+        } catch (err) {
+          console.error('Error canjeando código pendiente de acceso:', err);
+        } finally {
+          storageService.clearPendingAccessCode();
+        }
+      }
+
       setUsuarioAutenticado(true);
       setNombreUsuario(session.nombreMostrado);
       setSessionEmail(session.email || null);
@@ -669,9 +760,12 @@ export default function App() {
         setNombreUsuario(jugadorMatch.nombre);
         mostrarToast(`¡Acceso activado! Bienvenido/a, ${jugadorMatch.nombre}.`);
       } else {
-        mostrarToast(
-          '¡Contraseña creada! Confirma el enlace en tu correo para luego entrar con "Ingresar".'
-        );
+        setConfirmacionRegistroModal({
+          estado: 'pendiente',
+          nombre: jugadorMatch.nombre,
+          email: email.trim(),
+          tieneCodigoPendiente: false,
+        });
       }
       return;
     }
@@ -770,11 +864,15 @@ export default function App() {
           setAdminEmail(null);
           mostrarToast(`¡Bienvenido/a ${creado.nombre}! Tu ficha y cuenta quedaron activas.`);
         } else {
-          mostrarToast(
-            codigoTrim
-              ? `¡Ficha guardada, ${creado.nombre}! Confirma tu correo, ingresa y canjea el código en "Mi Perfil".`
-              : `¡Ficha guardada, ${creado.nombre}! Confirma el enlace en tu email para ingresar luego.`
-          );
+          if (codigoTrim) {
+            storageService.savePendingAccessCode(datos.email, codigoTrim);
+          }
+          setConfirmacionRegistroModal({
+            estado: 'pendiente',
+            nombre: creado.nombre,
+            email: datos.email.trim(),
+            tieneCodigoPendiente: Boolean(codigoTrim),
+          });
         }
         return;
       } catch (err) {
@@ -1981,6 +2079,23 @@ export default function App() {
           onGuardarTorneo={handleGuardarTorneo}
           onNotificar={mostrarToast}
           onCerrar={() => setMostrarModalTorneo(false)}
+        />
+      )}
+
+      {/* Modal de Confirmación de Email / Registro */}
+      {confirmacionRegistroModal && (
+        <ConfirmacionRegistroModal
+          datos={confirmacionRegistroModal}
+          clubConfig={clubConfig}
+          onIrAIngresar={abrirLogin}
+          onIrAPanelStaff={(v) => {
+            if (v === 'admin' && permisos.esSuperAdmin) {
+              setVistaActiva('admin');
+            } else if (v === 'cantina' && permisos.esStaff) {
+              setVistaActiva('cantina');
+            }
+          }}
+          onCerrar={() => setConfirmacionRegistroModal(null)}
         />
       )}
 

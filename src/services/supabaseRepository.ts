@@ -37,7 +37,11 @@ import {
   mapTurnoToDb,
 } from '../utils/supabaseMappers';
 import { generarClaveTurno } from '../utils/turnosLogic';
-import { AccessCodesConfig, normalizarRolStaff } from '../utils/authLogic';
+import {
+  AccessCodesConfig,
+  construirEmailRedirectUrl,
+  normalizarRolStaff,
+} from '../utils/authLogic';
 
 export interface AdminUserSession {
   userId: string;
@@ -181,10 +185,16 @@ export const supabaseRepository = {
     dni: string;
   }): Promise<{ hasSession: boolean }> {
     const client = getClient();
+    const emailRedirectTo =
+      typeof window !== 'undefined' && window.location?.origin
+        ? construirEmailRedirectUrl(window.location.origin)
+        : undefined;
+
     const { data, error } = await client.auth.signUp({
       email: params.email.trim(),
       password: params.password,
       options: {
+        emailRedirectTo,
         data: {
           nombre_completo: params.nombreCompleto.trim(),
           dni: params.dni.trim(),

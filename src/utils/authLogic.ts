@@ -221,3 +221,59 @@ export function resolverSesionLocal(params: {
   };
 }
 
+export interface EmailConfirmationRedirectResult {
+  status: 'none' | 'confirmed' | 'error';
+  mensajeError?: string;
+}
+
+export function construirEmailRedirectUrl(origin: string): string {
+  const cleanOrigin = (origin || '').trim().replace(/\/+$/, '');
+  if (!cleanOrigin) return '/?confirmado=1';
+  return `${cleanOrigin}/?confirmado=1`;
+}
+
+export function parsearRetornoConfirmacionEmail(
+  search: string,
+  hash: string
+): EmailConfirmationRedirectResult {
+  const searchParams = new URLSearchParams((search || '').replace(/^\?/, ''));
+  const hashClean = (hash || '').replace(/^#/, '');
+  const hashParams = new URLSearchParams(hashClean);
+
+  const rawError =
+    searchParams.get('error_description') ||
+    hashParams.get('error_description') ||
+    searchParams.get('error') ||
+    hashParams.get('error') ||
+    searchParams.get('error_code') ||
+    hashParams.get('error_code');
+
+  if (rawError) {
+    const lower = rawError.toLowerCase();
+    const mensajeError =
+      lower.includes('expired') || lower.includes('invalid') || lower.includes('otp_expired')
+        ? 'El enlace de confirmación venció o ya fue utilizado. Probá ingresar con tu email y contraseña.'
+        : 'No se pudo confirmar tu correo desde ese enlace. Probá ingresar con tu email y contraseña.';
+    return { status: 'error', mensajeError };
+  }
+
+  const tipoHash = (hashParams.get('type') || searchParams.get('type') || '').toLowerCase();
+  if (tipoHash === 'recovery') {
+    return { status: 'none' };
+  }
+
+  const esConfirmado =
+    searchParams.get('confirmado') === '1' ||
+    searchParams.get('registro') === 'confirmado' ||
+    searchParams.has('code') ||
+    tipoHash === 'signup' ||
+    hashParams.has('access_token');
+
+  if (esConfirmado) {
+    return { status: 'confirmed' };
+  }
+
+  return { status: 'none' };
+}
+
+
