@@ -637,6 +637,8 @@ import {
   obtenerFechaHoraArgentina,
   evaluarVentanaReserva,
   evaluarBloqueoDia,
+  evaluarHorarioPasado,
+  parsearMinutosHora,
   formatearObservacionInvitado,
   combinarNotasInvitado,
 } from './turnosLogic';
@@ -694,15 +696,43 @@ test('turnosLogic: regla de reserva en el día desde las 08:00 hs AR y bloqueo t
   assert.equal(resManana.habilitado, false);
   assert.equal(resManana.esHoy, false);
 
-  // Staff puede operar siempre
-  const resStaff = evaluarVentanaReserva({
+  // Staff también está restringido a HOY desde las 08:00 hs (sin excepción de rol)
+  const resStaffManana = evaluarVentanaReserva({
     fechaSeleccionada: '2026-11-20',
+    soloTurnosEnElDia: true,
+    horaAperturaTurnos: 8,
+    esStaff: true,
+    ahora: despuesDeLas8,
+  });
+  assert.equal(resStaffManana.habilitado, false);
+
+  const resStaffAntes8 = evaluarVentanaReserva({
+    fechaSeleccionada: '2026-11-19',
     soloTurnosEnElDia: true,
     horaAperturaTurnos: 8,
     esStaff: true,
     ahora: antesDeLas8,
   });
-  assert.equal(resStaff.habilitado, true);
+  assert.equal(resStaffAntes8.habilitado, false);
+
+  const resStaffHoy = evaluarVentanaReserva({
+    fechaSeleccionada: '2026-11-19',
+    soloTurnosEnElDia: true,
+    horaAperturaTurnos: 8,
+    esStaff: true,
+    ahora: despuesDeLas8,
+  });
+  assert.equal(resStaffHoy.habilitado, true);
+
+  // Fechas pasadas bloqueadas para todos (incluido staff)
+  const resFechaPasada = evaluarVentanaReserva({
+    fechaSeleccionada: '2026-11-18',
+    soloTurnosEnElDia: false,
+    horaAperturaTurnos: 8,
+    esStaff: true,
+    ahora: despuesDeLas8,
+  });
+  assert.equal(resFechaPasada.habilitado, false);
 
   // Día bloqueado por evento especial
   const bloqueos = {
@@ -1177,6 +1207,49 @@ test('importLogic: parsee correctamente planilla con formato del club CARC', () 
   assert.equal(j2.telefono, '');
   assert.equal(j2.fechaNacimiento, undefined);
 });
+
+test('turnosLogic: evaluarHorarioPasado bloquea turnos ya comenzados o de fechas pasadas en hora Argentina', () => {
+  assert.equal(parsearMinutosHora('15:00'), 900);
+  assert.equal(parsearMinutosHora('08:30'), 510);
+  assert.equal(parsearMinutosHora('invalid'), null);
+
+  // 2026-11-19 17:00 hora Argentina = 20:00 UTC
+  const ahora17Ar = new Date('2026-11-19T20:00:00Z');
+
+  // Turno de 15:00 hs a las 17:00 hs -> ya pasó
+  const res15 = evaluarHorarioPasado({
+    fechaSeleccionada: '2026-11-19',
+    inicio: '15:00',
+    ahora: ahora17Ar,
+  });
+  assert.equal(res15.pasado, true);
+  assert.match(res15.motivo || '', /15:00 hs/);
+
+  // Turno que comienza exactamente ahora (17:00 hs) -> bloqueado
+  const res17 = evaluarHorarioPasado({
+    fechaSeleccionada: '2026-11-19',
+    inicio: '17:00',
+    ahora: ahora17Ar,
+  });
+  assert.equal(res17.pasado, true);
+
+  // Turno futuro (18:00 hs) -> permitido
+  const res18 = evaluarHorarioPasado({
+    fechaSeleccionada: '2026-11-19',
+    inicio: '18:00',
+    ahora: ahora17Ar,
+  });
+  assert.equal(res18.pasado, false);
+
+  // Fecha pasada -> bloqueada siempre
+  const resAyer = evaluarHorarioPasado({
+    fechaSeleccionada: '2026-11-18',
+    inicio: '21:00',
+    ahora: ahora17Ar,
+  });
+  assert.equal(resAyer.pasado, true);
+});
+
 
 
 

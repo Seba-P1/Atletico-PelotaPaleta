@@ -566,6 +566,24 @@ BEGIN
     RAISE EXCEPTION 'El horario seleccionado no se encuentra habilitado.';
   END IF;
 
+  -- Reglas de fecha y horario: aplican a TODOS los roles sin excepción
+  IF p_fecha < v_fecha_ar THEN
+    RAISE EXCEPTION 'No es posible reservar turnos en fechas pasadas.';
+  END IF;
+
+  IF COALESCE(v_cfg.solo_turnos_en_el_dia, true) THEN
+    IF p_fecha <> v_fecha_ar THEN
+      RAISE EXCEPTION 'Solo se pueden reservar turnos en el día (%).', to_char(v_fecha_ar, 'DD/MM/YYYY');
+    END IF;
+    IF v_hora_num < COALESCE(v_cfg.hora_apertura_turnos, 8) THEN
+      RAISE EXCEPTION 'La reserva de turnos del día se habilita a partir de las %:00 hs.', lpad(COALESCE(v_cfg.hora_apertura_turnos, 8)::text, 2, '0');
+    END IF;
+  END IF;
+
+  IF p_fecha = v_fecha_ar AND v_horario.inicio ~ '^\d{1,2}:\d{2}$' AND v_now_ar::time >= v_horario.inicio::time THEN
+    RAISE EXCEPTION 'El turno de las % hs ya comenzó o finalizó (hora actual % hs).', v_horario.inicio, v_hora_ar;
+  END IF;
+
   IF NOT v_es_staff THEN
     SELECT * INTO v_dia_bloqueado
     FROM public.dias_bloqueados
@@ -573,15 +591,6 @@ BEGIN
 
     IF FOUND THEN
       RAISE EXCEPTION 'Los turnos de esta fecha están suspendidos: %', v_dia_bloqueado.motivo;
-    END IF;
-
-    IF COALESCE(v_cfg.solo_turnos_en_el_dia, true) THEN
-      IF p_fecha <> v_fecha_ar THEN
-        RAISE EXCEPTION 'Solo se pueden reservar turnos en el día (%).', to_char(v_fecha_ar, 'DD/MM/YYYY');
-      END IF;
-      IF v_hora_num < COALESCE(v_cfg.hora_apertura_turnos, 8) THEN
-        RAISE EXCEPTION 'La reserva de turnos del día se habilita a partir de las %:00 hs.', lpad(COALESCE(v_cfg.hora_apertura_turnos, 8)::text, 2, '0');
-      END IF;
     END IF;
 
     SELECT j.nombre INTO v_bloqueado_nombre

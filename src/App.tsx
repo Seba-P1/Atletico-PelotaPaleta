@@ -46,7 +46,7 @@ import {
   generarClaveTurno,
   normalizarTurnosLegacy,
   evaluarVentanaReserva,
-  evaluarBloqueoDia,
+  evaluarHorarioPasado,
   obtenerFechaHoraArgentina,
 } from './utils/turnosLogic';
 import {
@@ -287,6 +287,13 @@ export default function App() {
 
   // Fecha activa en Turnero
   const [fechaSeleccionada, setFechaSeleccionada] = useState<string>(hoyStr);
+
+  useEffect(() => {
+    const hoyActualAr = obtenerFechaHoraArgentina().fechaIso;
+    if (clubConfig.soloTurnosEnElDia !== false && fechaSeleccionada !== hoyActualAr) {
+      setFechaSeleccionada(hoyActualAr);
+    }
+  }, [clubConfig.soloTurnosEnElDia, fechaSeleccionada]);
 
   // Colecciones persistentes (cuando Supabase está configurado, arranca vacío hasta sincronizar DB real)
   const [publicaciones, setPublicaciones] = useState<PublicacionClub[]>(() =>
@@ -1156,21 +1163,26 @@ export default function App() {
     pagadoAhora: boolean,
     metodoPago?: MetodoPago
   ) => {
-    if (!permisos.esStaff) {
-      const bloqueoDia = evaluarBloqueoDia(nuevoTurno.fecha, diasBloqueados);
-      if (bloqueoDia.bloqueado) {
-        mostrarToast(bloqueoDia.motivo || 'Los turnos de este día están bloqueados por evento.');
-        return;
-      }
-      const ventana = evaluarVentanaReserva({
+    const ventana = evaluarVentanaReserva({
+      fechaSeleccionada: nuevoTurno.fecha,
+      soloTurnosEnElDia: clubConfig.soloTurnosEnElDia,
+      horaAperturaTurnos: clubConfig.horaAperturaTurnos,
+      diasBloqueados,
+      esStaff: permisos.esStaff,
+    });
+    if (!ventana.habilitado) {
+      mostrarToast(ventana.motivo || 'Los turnos se habilitan en el día desde las 08:00 hs.');
+      return;
+    }
+
+    const horarioSlot = horarios.find((h) => h.id === nuevoTurno.horarioId);
+    if (horarioSlot) {
+      const horarioPasado = evaluarHorarioPasado({
         fechaSeleccionada: nuevoTurno.fecha,
-        soloTurnosEnElDia: clubConfig.soloTurnosEnElDia,
-        horaAperturaTurnos: clubConfig.horaAperturaTurnos,
-        diasBloqueados,
-        esStaff: false,
+        inicio: horarioSlot.inicio,
       });
-      if (!ventana.habilitado) {
-        mostrarToast(ventana.motivo || 'Los turnos se habilitan en el día desde las 08:00 hs.');
+      if (horarioPasado.pasado) {
+        mostrarToast(horarioPasado.motivo || 'El horario de este turno ya comenzó o finalizó.');
         return;
       }
     }

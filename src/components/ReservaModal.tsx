@@ -5,6 +5,7 @@ import {
   validarReserva,
   generarClaveTurno,
   evaluarVentanaReserva,
+  evaluarHorarioPasado,
   formatearObservacionInvitado,
   combinarNotasInvitado,
 } from '../utils/turnosLogic';
@@ -268,6 +269,12 @@ export const ReservaModal: React.FC<ReservaModalProps> = ({
   const [metodoPago, setMetodoPago] = useState<MetodoPago>('efectivo');
   const [errorMsg, setErrorMsg] = useState<string>('');
 
+  const [ahoraTick, setAhoraTick] = useState<Date>(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setAhoraTick(new Date()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
   const costoTotal = horario.precioCancha + horario.precioLuz;
 
   const ventanaReserva = evaluarVentanaReserva({
@@ -276,6 +283,13 @@ export const ReservaModal: React.FC<ReservaModalProps> = ({
     horaAperturaTurnos: clubConfig.horaAperturaTurnos,
     diasBloqueados,
     esStaff: esAdmin,
+    ahora: ahoraTick,
+  });
+
+  const horarioPasado = evaluarHorarioPasado({
+    fechaSeleccionada: fechaStr,
+    inicio: horario.inicio,
+    ahora: ahoraTick,
   });
 
   const evaluacionReserva = evaluarJugadoresParaReserva(
@@ -284,19 +298,25 @@ export const ReservaModal: React.FC<ReservaModalProps> = ({
     { jugadorLogueado, clubConfig }
   );
 
+  const reservaBloqueadaPorHorarioOFecha = !ventanaReserva.habilitado || horarioPasado.pasado;
   const reservaBloqueadaParaUsuario =
-    !esAdmin && (!evaluacionReserva.puedeReservar || !ventanaReserva.habilitado);
+    reservaBloqueadaPorHorarioOFecha || (!esAdmin && !evaluacionReserva.puedeReservar);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
 
-    if (!esAdmin && !ventanaReserva.habilitado) {
+    if (horarioPasado.pasado) {
+      setErrorMsg(horarioPasado.motivo || 'El horario de este turno ya comenzó o finalizó.');
+      return;
+    }
+
+    if (!ventanaReserva.habilitado) {
       setErrorMsg(ventanaReserva.motivo || 'Las reservas no están habilitadas en este momento.');
       return;
     }
 
-    if (reservaBloqueadaParaUsuario) {
+    if (!esAdmin && !evaluacionReserva.puedeReservar) {
       const nombres = evaluacionReserva.bloqueados.map((j) => j.nombre).join(', ');
       setErrorMsg(
         `No es posible confirmar el turno porque ${nombres} está bloqueado por la Comisión Directiva hasta regularizar su pago.`
@@ -425,10 +445,14 @@ export const ReservaModal: React.FC<ReservaModalProps> = ({
           </div>
         </div>
 
-        {!esAdmin && !ventanaReserva.habilitado && (
+        {reservaBloqueadaPorHorarioOFecha && (
           <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/50 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs flex items-start gap-2">
             <Clock className="w-4 h-4 shrink-0 mt-0.5" />
-            <span>{ventanaReserva.motivo}</span>
+            <span>
+              {horarioPasado.pasado
+                ? horarioPasado.motivo || 'El horario de este turno ya comenzó o finalizó.'
+                : ventanaReserva.motivo}
+            </span>
           </div>
         )}
 

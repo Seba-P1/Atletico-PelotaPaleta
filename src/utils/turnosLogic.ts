@@ -176,7 +176,7 @@ export interface DiaCalendario {
 
 export function generarProximosDias(cantidad: number, baseFecha?: string): DiaCalendario[] {
   const dias: DiaCalendario[] = [];
-  const hoyStr = baseFecha || new Date().toISOString().split('T')[0];
+  const hoyStr = baseFecha || obtenerFechaHoraArgentina().fechaIso;
   const baseDate = new Date(hoyStr + 'T12:00:00');
   const total = Math.max(1, Math.min(30, cantidad));
 
@@ -240,6 +240,51 @@ export function obtenerFechaHoraArgentina(ahora: Date = new Date()): FechaHoraAr
   };
 }
 
+export function parsearMinutosHora(horaStr: string): number | null {
+  const clean = (horaStr || '').trim();
+  const match = clean.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+  const h = parseInt(match[1], 10);
+  const m = parseInt(match[2], 10);
+  if (h < 0 || h > 23 || m < 0 || m > 59) return null;
+  return h * 60 + m;
+}
+
+export interface EvaluacionHorarioPasado {
+  pasado: boolean;
+  motivo?: string;
+}
+
+export function evaluarHorarioPasado(params: {
+  fechaSeleccionada: string;
+  inicio: string;
+  ahora?: Date;
+}): EvaluacionHorarioPasado {
+  const { fechaSeleccionada, inicio, ahora = new Date() } = params;
+  const { fechaIso: fechaHoyAr, hora, minuto, horaFormateada } = obtenerFechaHoraArgentina(ahora);
+
+  if (fechaSeleccionada < fechaHoyAr) {
+    return {
+      pasado: true,
+      motivo: 'Este horario corresponde a una fecha pasada.',
+    };
+  }
+  if (fechaSeleccionada > fechaHoyAr) {
+    return { pasado: false };
+  }
+
+  const inicioMin = parsearMinutosHora(inicio);
+  const ahoraMin = hora * 60 + minuto;
+  if (inicioMin !== null && ahoraMin >= inicioMin) {
+    return {
+      pasado: true,
+      motivo: `El turno de las ${inicio} hs ya comenzó o finalizó (hora actual ${horaFormateada} hs).`,
+    };
+  }
+
+  return { pasado: false };
+}
+
 export interface EvaluacionBloqueoDia {
   bloqueado: boolean;
   motivo: string;
@@ -295,6 +340,21 @@ export function evaluarVentanaReserva(params: {
   const antesDeApertura = hora < horaApertura;
   const bloqueoDia = evaluarBloqueoDia(fechaSeleccionada, diasBloqueados);
 
+  // Fecha pasada bloqueada para todos
+  if (fechaSeleccionada < fechaHoyAr) {
+    return {
+      habilitado: false,
+      motivo: 'No es posible reservar turnos en fechas pasadas.',
+      esHoy,
+      antesDeApertura,
+      esDiaBloqueado: bloqueoDia.bloqueado,
+      horaApertura,
+      fechaHoyAr,
+      horaActualAr: horaFormateada,
+    };
+  }
+
+  // Bloqueo de jornada por evento: staff puede gestionar excepción si esStaff
   if (bloqueoDia.bloqueado && !esStaff) {
     return {
       habilitado: false,
@@ -308,11 +368,12 @@ export function evaluarVentanaReserva(params: {
     };
   }
 
-  if (soloTurnosEnElDia && !esStaff) {
+  // Regla "Solo HOY desde las 08:00 hs": aplica a TODOS sin excepción de rol
+  if (soloTurnosEnElDia) {
     if (!esHoy) {
       return {
         habilitado: false,
-        motivo: `Las reservas públicas se habilitan únicamente en el día (${fechaHoyAr}) a partir de las ${String(horaApertura).padStart(2, '0')}:00 hs.`,
+        motivo: `Las reservas se habilitan únicamente en el día (${fechaHoyAr}) a partir de las ${String(horaApertura).padStart(2, '0')}:00 hs.`,
         esHoy,
         antesDeApertura,
         esDiaBloqueado: bloqueoDia.bloqueado,
