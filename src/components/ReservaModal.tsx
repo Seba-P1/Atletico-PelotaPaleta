@@ -6,6 +6,7 @@ import {
   generarClaveTurno,
   evaluarVentanaReserva,
   evaluarHorarioPasado,
+  evaluarLimiteTurnoDiario,
   formatearObservacionInvitado,
   combinarNotasInvitado,
 } from '../utils/turnosLogic';
@@ -206,10 +207,14 @@ const SelectorPelotari: React.FC<SelectorPelotariProps> = ({
 interface ReservaModalProps {
   horario: HorarioConfig;
   fechaStr: string;
+  turnos?: Record<string, Turno>;
   jugadores: Jugador[];
   clubConfig: ClubConfig;
   diasBloqueados?: Record<string, DiaBloqueado>;
   usuarioActual: string;
+  usuarioAutenticado?: boolean;
+  emailUsuario?: string | null;
+  userId?: string | null;
   jugadorLogueado?: Jugador | null;
   esAdmin?: boolean;
   onAbrirRegistroJugador?: () => void;
@@ -224,10 +229,14 @@ interface ReservaModalProps {
 export const ReservaModal: React.FC<ReservaModalProps> = ({
   horario,
   fechaStr,
+  turnos = {},
   jugadores,
   clubConfig,
   diasBloqueados = {},
   usuarioActual,
+  usuarioAutenticado = true,
+  emailUsuario = null,
+  userId = null,
   jugadorLogueado = null,
   esAdmin = false,
   onAbrirRegistroJugador,
@@ -294,13 +303,24 @@ export const ReservaModal: React.FC<ReservaModalProps> = ({
     ahora: ahoraTick,
   });
 
+  const requiereRegistro = !usuarioAutenticado && !esAdmin;
+  const limiteDiario = evaluarLimiteTurnoDiario({
+    turnos,
+    fechaSeleccionada: fechaStr,
+    esStaff: esAdmin,
+    nombreUsuario: jugadorUsuario?.nombre || nombreUsuario,
+    emailUsuario: emailUsuario || jugadorUsuario?.email,
+    userId,
+  });
+
   const evaluacionReserva = evaluarJugadoresParaReserva(
     [p1Delantero, p1Zaguero, p2Delantero, p2Zaguero, organizador],
     jugadores,
     { jugadorLogueado, clubConfig }
   );
 
-  const reservaBloqueadaPorHorarioOFecha = !ventanaReserva.habilitado || horarioPasado.pasado;
+  const reservaBloqueadaPorHorarioOFecha =
+    !ventanaReserva.habilitado || horarioPasado.pasado || requiereRegistro || limiteDiario.alcanzado;
   const reservaBloqueadaParaUsuario =
     reservaBloqueadaPorHorarioOFecha || (!esAdmin && !evaluacionReserva.puedeReservar);
 
@@ -308,6 +328,18 @@ export const ReservaModal: React.FC<ReservaModalProps> = ({
     e.preventDefault();
     if (enviando) return;
     setErrorMsg('');
+
+    if (requiereRegistro) {
+      setErrorMsg('Solo los usuarios registrados pueden reservar turnos. Iniciá sesión o registrate primero.');
+      return;
+    }
+
+    if (limiteDiario.alcanzado) {
+      setErrorMsg(
+        limiteDiario.motivo || 'Ya tenés un turno reservado hoy. Solo se permite 1 turno por día por persona.'
+      );
+      return;
+    }
 
     if (horarioPasado.pasado) {
       setErrorMsg(horarioPasado.motivo || 'El horario de este turno ya comenzó o finalizó.');
@@ -463,7 +495,11 @@ export const ReservaModal: React.FC<ReservaModalProps> = ({
           <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/50 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs flex items-start gap-2">
             <Clock className="w-4 h-4 shrink-0 mt-0.5" />
             <span>
-              {horarioPasado.pasado
+              {requiereRegistro
+                ? 'Solo los usuarios registrados pueden reservar turnos. Iniciá sesión o registrate primero.'
+                : limiteDiario.alcanzado
+                ? limiteDiario.motivo || 'Ya tenés un turno reservado hoy. Solo se permite 1 turno por día por persona.'
+                : horarioPasado.pasado
                 ? horarioPasado.motivo || 'El horario de este turno ya comenzó o finalizó.'
                 : ventanaReserva.motivo}
             </span>

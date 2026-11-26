@@ -47,6 +47,7 @@ import {
   normalizarTurnosLegacy,
   evaluarVentanaReserva,
   evaluarHorarioPasado,
+  evaluarLimiteTurnoDiario,
   obtenerFechaHoraArgentina,
 } from './utils/turnosLogic';
 import {
@@ -174,6 +175,7 @@ export default function App() {
     if (supabaseConfigurado) return null;
     return storageService.loadLocalSession()?.email || null;
   });
+  const [sessionUserId, setSessionUserId] = useState<string | null>(null);
 
   const operadorNombre = React.useMemo(() => {
     if (nombreUsuario && nombreUsuario !== 'Socio Pelotari') return nombreUsuario;
@@ -497,6 +499,7 @@ export default function App() {
         setUsuarioAutenticado(true);
         setNombreUsuario(session.nombreMostrado);
         setSessionEmail(session.email || null);
+        setSessionUserId(session.userId || null);
         setRolAcceso(session.rolAcceso);
         setAdminEmail(session.rolAcceso === 'super_admin' ? session.email : null);
         if (session.rolAcceso === 'super_admin' || session.rolAcceso === 'cantinero') {
@@ -508,6 +511,7 @@ export default function App() {
         setRolAcceso('guest');
         setAdminEmail(null);
         setSessionEmail(null);
+        setSessionUserId(null);
         setNombreUsuario('Socio Pelotari');
         return null;
       }
@@ -547,6 +551,7 @@ export default function App() {
             setRolAcceso('guest');
             setAdminEmail(null);
             setSessionEmail(null);
+            setSessionUserId(null);
             setNombreUsuario('Socio Pelotari');
             setVistaActiva('turnos');
             return;
@@ -693,6 +698,7 @@ export default function App() {
       setUsuarioAutenticado(true);
       setNombreUsuario(session.nombreMostrado);
       setSessionEmail(session.email || null);
+      setSessionUserId(session.userId || null);
       setRolAcceso(session.rolAcceso);
       setAdminEmail(session.rolAcceso === 'super_admin' ? session.email : null);
 
@@ -865,6 +871,7 @@ export default function App() {
     setUsuarioAutenticado(false);
     setAdminEmail(null);
     setSessionEmail(null);
+    setSessionUserId(null);
     setModalPerfilAbierto(false);
     setNombreUsuario('Socio Pelotari');
     setVistaActiva('turnos');
@@ -1167,11 +1174,41 @@ export default function App() {
   // --------------------------------------------------------------------------
   // TURNOS: RESERVAR, LIBERAR, MANTENIMIENTO, COBRAR, EDITAR, RESULTADO
   // --------------------------------------------------------------------------
+  const handleAbrirReserva = (horarioId: string) => {
+    if (!usuarioAutenticado && !permisos.esStaff) {
+      mostrarToast('Solo los usuarios registrados pueden reservar turnos. Ingresá con tu cuenta o registrate primero.');
+      return;
+    }
+
+    const limiteDiario = evaluarLimiteTurnoDiario({
+      turnos,
+      fechaSeleccionada,
+      esStaff: permisos.esStaff,
+      nombreUsuario: jugadorLogueado?.nombre || (usuarioAutenticado ? nombreUsuario : null),
+      emailUsuario: sessionEmail || jugadorLogueado?.email,
+      userId: sessionUserId,
+    });
+    if (limiteDiario.alcanzado) {
+      mostrarToast(
+        limiteDiario.motivo || 'Ya tenés un turno reservado hoy. Solo se permite 1 turno por día por persona.'
+      );
+      return;
+    }
+
+    setModalReservaHorarioId(horarioId);
+  };
+
   const handleConfirmarReserva = async (
     nuevoTurno: Turno,
     pagadoAhora: boolean,
     metodoPago?: MetodoPago
   ): Promise<{ ok: boolean; error?: string }> => {
+    if (!usuarioAutenticado && !permisos.esStaff) {
+      const msg = 'Solo los usuarios registrados pueden reservar turnos. Iniciá sesión o registrate primero.';
+      mostrarToast(msg);
+      return { ok: false, error: msg };
+    }
+
     const ventana = evaluarVentanaReserva({
       fechaSeleccionada: nuevoTurno.fecha,
       soloTurnosEnElDia: clubConfig.soloTurnosEnElDia,
@@ -1198,9 +1235,25 @@ export default function App() {
       }
     }
 
+    const limiteDiario = evaluarLimiteTurnoDiario({
+      turnos,
+      fechaSeleccionada: nuevoTurno.fecha,
+      esStaff: permisos.esStaff,
+      nombreUsuario: jugadorLogueado?.nombre || (usuarioAutenticado ? nombreUsuario : null),
+      emailUsuario: sessionEmail || jugadorLogueado?.email,
+      userId: sessionUserId,
+    });
+    if (limiteDiario.alcanzado) {
+      const msg =
+        limiteDiario.motivo || 'Ya tenés un turno reservado hoy. Solo se permite 1 turno por día por persona.';
+      mostrarToast(msg);
+      return { ok: false, error: msg };
+    }
+
     const turnoConAudit: Turno = {
       ...nuevoTurno,
-      registradoPor: permisos.esStaff ? operadorNombre : nuevoTurno.organizadorNombre,
+      registradoPor: permisos.esStaff ? operadorNombre : nuevoTurno.organizadorNombre || nombreUsuario,
+      registradoUserId: sessionUserId || sessionEmail || undefined,
     };
 
     if (supabaseConectado) {
@@ -2016,13 +2069,16 @@ export default function App() {
             diasBloqueados={diasBloqueados}
             fechaSeleccionada={fechaSeleccionada}
             setFechaSeleccionada={setFechaSeleccionada}
-            onAbrirReserva={(horarioId) => setModalReservaHorarioId(horarioId)}
+            onAbrirReserva={handleAbrirReserva}
             onAbrirDetalle={(turnoId) => setModalDetalleTurnoId(turnoId)}
             onIrACantinaConTurno={handleIrACantinaConTurno}
             esAdmin={permisos.esStaff}
             rolAcceso={rolAcceso}
             usuarioAutenticado={usuarioAutenticado}
             jugadorLogueado={jugadorLogueado}
+            usuarioNombre={usuarioAutenticado ? nombreUsuario : null}
+            sessionEmail={sessionEmail}
+            userId={sessionUserId}
             onAbrirPerfil={jugadorLogueado ? abrirPerfilJugador : undefined}
             onLiberarTurno={handleLiberarTurno}
             onBloquearMantenimiento={handleBloquearMantenimiento}
@@ -2261,10 +2317,14 @@ export default function App() {
         <ReservaModal
           horario={horarioSeleccionadoParaReserva}
           fechaStr={fechaSeleccionada}
+          turnos={turnos}
           jugadores={jugadores}
           clubConfig={clubConfig}
           diasBloqueados={diasBloqueados}
           usuarioActual={nombreUsuario}
+          usuarioAutenticado={usuarioAutenticado}
+          emailUsuario={sessionEmail}
+          userId={sessionUserId}
           jugadorLogueado={jugadorLogueado}
           esAdmin={permisos.esStaff}
           onAbrirRegistroJugador={() => {

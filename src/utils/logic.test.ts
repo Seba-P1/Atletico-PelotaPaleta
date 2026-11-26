@@ -638,6 +638,7 @@ import {
   evaluarVentanaReserva,
   evaluarBloqueoDia,
   evaluarHorarioPasado,
+  evaluarLimiteTurnoDiario,
   parsearMinutosHora,
   formatearObservacionInvitado,
   combinarNotasInvitado,
@@ -1248,6 +1249,81 @@ test('turnosLogic: evaluarHorarioPasado bloquea turnos ya comenzados o de fechas
     ahora: ahora17Ar,
   });
   assert.equal(resAyer.pasado, true);
+});
+
+test('turnosLogic: evaluarLimiteTurnoDiario permite 1 turno por día por persona y exime a staff', () => {
+  const turnosExistentes = {
+    '2026-11-26__19-20': {
+      id: '2026-11-26__19-20',
+      horarioId: '19-20',
+      fecha: '2026-11-26',
+      estado: 'ocupado' as const,
+      p1: { nombre: 'P1', delantero: 'Lucas Martínez', zaguero: '' },
+      p2: { nombre: 'P2', delantero: '', zaguero: '' },
+      organizadorNombre: 'Lucas Martínez',
+      registradoPor: 'Lucas Martínez',
+      registradoUserId: 'uid-lucas',
+    },
+    '2026-11-26__18-19': {
+      id: '2026-11-26__18-19',
+      horarioId: '18-19',
+      fecha: '2026-11-26',
+      estado: 'libre' as const,
+      p1: null,
+      p2: null,
+      organizadorNombre: 'Mateo Díaz',
+      registradoUserId: 'uid-mateo',
+    },
+  };
+
+  // Usuario que ya tiene turno ocupado hoy (por nombre o por userId) -> bloqueado
+  const resPorNombre = evaluarLimiteTurnoDiario({
+    turnos: turnosExistentes,
+    fechaSeleccionada: '2026-11-26',
+    esStaff: false,
+    nombreUsuario: 'lucas martinez',
+  });
+  assert.equal(resPorNombre.alcanzado, true);
+  assert.match(resPorNombre.motivo || '', /19-20 hs/);
+
+  const resPorUid = evaluarLimiteTurnoDiario({
+    turnos: turnosExistentes,
+    fechaSeleccionada: '2026-11-26',
+    esStaff: false,
+    nombreUsuario: 'Otro Nombre',
+    userId: 'uid-lucas',
+  });
+  assert.equal(resPorUid.alcanzado, true);
+
+  // Usuario cuyo turno anterior fue liberado (estado 'libre') -> puede volver a reservar
+  const resLiberado = evaluarLimiteTurnoDiario({
+    turnos: turnosExistentes,
+    fechaSeleccionada: '2026-11-26',
+    esStaff: false,
+    nombreUsuario: 'Mateo Díaz',
+    userId: 'uid-mateo',
+  });
+  assert.equal(resLiberado.alcanzado, false);
+
+  // Otro jugador sin turno hoy -> permitido
+  const resOtro = evaluarLimiteTurnoDiario({
+    turnos: turnosExistentes,
+    fechaSeleccionada: '2026-11-26',
+    esStaff: false,
+    nombreUsuario: 'Juan Pérez',
+    userId: 'uid-juan',
+  });
+  assert.equal(resOtro.alcanzado, false);
+
+  // Staff puede registrar turnos para terceros aunque ya existan turnos en el día
+  const resStaff = evaluarLimiteTurnoDiario({
+    turnos: turnosExistentes,
+    fechaSeleccionada: '2026-11-26',
+    esStaff: true,
+    nombreUsuario: 'Lucas Martínez',
+    userId: 'uid-lucas',
+  });
+  assert.equal(resStaff.alcanzado, false);
 });
 
 

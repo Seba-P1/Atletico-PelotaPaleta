@@ -197,6 +197,7 @@ export function mapTurnoFromDb(row: any): Turno {
     resultado: row.resultado ?? undefined,
     comandaCantinaId: row.comanda_cantina_id ?? undefined,
     registradoPor: row.registrado_por ?? undefined,
+    registradoUserId: row.registrado_user_id ?? undefined,
   };
 }
 

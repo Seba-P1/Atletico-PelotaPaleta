@@ -142,9 +142,12 @@ CREATE TABLE IF NOT EXISTS public.turnos (
   resultado jsonb,
   comanda_cantina_id text,
   registrado_por text,
+  registrado_user_id uuid,
   updated_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT turnos_fecha_horario_unique UNIQUE (fecha, horario_id)
 );
+
+ALTER TABLE public.turnos ADD COLUMN IF NOT EXISTS registrado_user_id uuid;
 
 -- 2.6 Catálogo e inventario de Cantina / Buffet / Pelotas
 CREATE TABLE IF NOT EXISTS public.productos_cantina (
@@ -548,8 +551,17 @@ DECLARE
   v_bloqueado_nombre text;
   v_es_staff boolean;
   v_operador text;
+  v_user_id uuid;
+  v_email text;
+  v_jugador_nombre text;
 BEGIN
+  v_user_id := auth.uid();
+  IF v_user_id IS NULL THEN
+    RAISE EXCEPTION 'Solo los usuarios registrados pueden reservar turnos. Iniciá sesión o registrate primero.';
+  END IF;
+
   v_es_staff := public.is_club_staff();
+  v_email := lower(trim(COALESCE(auth.jwt() ->> 'email', '')));
   v_now_ar := now() AT TIME ZONE 'America/Argentina/Buenos_Aires';
   v_fecha_ar := v_now_ar::date;
   v_hora_num := EXTRACT(HOUR FROM v_now_ar)::integer;
@@ -608,6 +620,39 @@ BEGIN
     IF FOUND THEN
       RAISE EXCEPTION 'El jugador % se encuentra bloqueado para sacar turnos por decisión de la Comisión Directiva. Regularizá tu mensualidad o deuda en cantina.', v_bloqueado_nombre;
     END IF;
+
+    SELECT j.nombre INTO v_jugador_nombre
+    FROM public.jugadores j
+    WHERE v_email <> '' AND lower(trim(COALESCE(j.email, ''))) = v_email
+    LIMIT 1;
+
+    v_jugador_nombre := COALESCE(
+      NULLIF(trim(v_jugador_nombre), ''),
+      NULLIF(trim(COALESCE(auth.jwt()->'user_metadata'->>'nombre', '')), ''),
+      NULLIF(trim(COALESCE(p_organizador_nombre, '')), '')
+    );
+
+    IF EXISTS (
+      SELECT 1
+      FROM public.turnos t
+      WHERE t.fecha = p_fecha
+        AND t.estado = 'ocupado'
+        AND (
+          t.registrado_user_id = v_user_id
+          OR (
+            v_jugador_nombre IS NOT NULL AND v_jugador_nombre <> '' AND (
+              lower(trim(COALESCE(t.organizador_nombre, ''))) = lower(trim(v_jugador_nombre))
+              OR lower(trim(COALESCE(t.registrado_por, ''))) = lower(trim(v_jugador_nombre))
+              OR lower(trim(COALESCE(t.p1->>'delantero', ''))) = lower(trim(v_jugador_nombre))
+              OR lower(trim(COALESCE(t.p1->>'zaguero', ''))) = lower(trim(v_jugador_nombre))
+              OR lower(trim(COALESCE(t.p2->>'delantero', ''))) = lower(trim(v_jugador_nombre))
+              OR lower(trim(COALESCE(t.p2->>'zaguero', ''))) = lower(trim(v_jugador_nombre))
+            )
+          )
+        )
+    ) THEN
+      RAISE EXCEPTION 'Ya tenés un turno reservado hoy. Solo se permite 1 turno por día por persona.';
+    END IF;
   END IF;
 
   v_operador := CASE
@@ -622,12 +667,12 @@ BEGIN
 
   INSERT INTO public.turnos (
     id, horario_id, fecha, estado, p1, p2,
-    organizador_nombre, notas, costo_total, pagado, metodo_pago, fecha_reserva, registrado_por
+    organizador_nombre, notas, costo_total, pagado, metodo_pago, fecha_reserva, registrado_por, registrado_user_id
   )
   VALUES (
     v_turno_id, p_horario_id, p_fecha, 'ocupado', p_p1, p_p2,
     p_organizador_nombre, NULLIF(trim(COALESCE(p_notas, '')), ''), v_costo_total,
-    v_pagado, v_metodo, now(), v_operador
+    v_pagado, v_metodo, now(), v_operador, v_user_id
   )
   ON CONFLICT (fecha, horario_id) DO UPDATE
   SET
@@ -641,6 +686,7 @@ BEGIN
     metodo_pago = EXCLUDED.metodo_pago,
     fecha_reserva = now(),
     registrado_por = EXCLUDED.registrado_por,
+    registrado_user_id = EXCLUDED.registrado_user_id,
     resultado = NULL
   WHERE public.turnos.estado = 'libre'
   RETURNING * INTO v_turno;
@@ -671,8 +717,11 @@ BEGIN
 END;
 $$;
 
+REVOKE ALL ON FUNCTION public.reservar_turno(text, date, jsonb, jsonb, text, text, boolean, text)
+FROM PUBLIC, anon;
+
 GRANT EXECUTE ON FUNCTION public.reservar_turno(text, date, jsonb, jsonb, text, text, boolean, text)
-TO anon, authenticated;
+TO authenticated;
 
 -- 6.1b Cobrar turno desde Staff (Cantina o Comisión Directiva)
 CREATE OR REPLACE FUNCTION public.cobrar_turno_staff(

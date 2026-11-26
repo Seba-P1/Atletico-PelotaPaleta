@@ -135,6 +135,7 @@ export interface Turno {
   resultado?: ResultadoPartido;
   comandaCantinaId?: string;
   registradoPor?: string;
+  registradoUserId?: string;
 }
 
 export type CategoriaProducto = 'bebidas' | 'comidas' | 'snacks' | 'pelota_paleta';

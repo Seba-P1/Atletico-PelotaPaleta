@@ -424,3 +424,87 @@ export function combinarNotasInvitado(notasBase: string, observacionesInvitados:
   return `${cleanNotas}\n${bloqueInv}`;
 }
 
+export interface EvaluacionLimiteDiario {
+  alcanzado: boolean;
+  turnoExistente?: Turno;
+  motivo?: string;
+}
+
+function normalizarIdentidadReserva(valor?: string | null): string {
+  return (valor || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+}
+
+/**
+ * Checks whether a non-staff user already holds an active ('ocupado') booking on `fechaSeleccionada`.
+ */
+export function evaluarLimiteTurnoDiario(params: {
+  turnos: Record<string, Turno>;
+  fechaSeleccionada: string;
+  esStaff: boolean;
+  nombreUsuario?: string | null;
+  emailUsuario?: string | null;
+  userId?: string | null;
+}): EvaluacionLimiteDiario {
+  const {
+    turnos,
+    fechaSeleccionada,
+    esStaff,
+    nombreUsuario,
+    emailUsuario,
+    userId,
+  } = params;
+
+  if (esStaff) {
+    return { alcanzado: false };
+  }
+
+  const nombreNorm = normalizarIdentidadReserva(nombreUsuario);
+  const emailNorm = normalizarIdentidadReserva(emailUsuario);
+  const uid = (userId || '').trim();
+
+  if (!nombreNorm && !emailNorm && !uid) {
+    return { alcanzado: false };
+  }
+
+  const turnosDelDia = obtenerTurnosDeFecha(turnos, fechaSeleccionada);
+  for (const turno of Object.values(turnosDelDia)) {
+    if (turno.estado !== 'ocupado') continue;
+
+    if (uid && turno.registradoUserId && turno.registradoUserId === uid) {
+      return {
+        alcanzado: true,
+        turnoExistente: turno,
+        motivo: `Ya tenés un turno reservado hoy (${turno.horarioId} hs). Solo se permite 1 turno por día por persona.`,
+      };
+    }
+
+    const participantes = [
+      turno.organizadorNombre,
+      turno.registradoPor,
+      turno.p1?.delantero,
+      turno.p1?.zaguero,
+      turno.p2?.delantero,
+      turno.p2?.zaguero,
+    ]
+      .map(normalizarIdentidadReserva)
+      .filter(Boolean);
+
+    const coincideNombre = Boolean(nombreNorm && participantes.includes(nombreNorm));
+    const coincideEmail = Boolean(emailNorm && participantes.includes(emailNorm));
+
+    if (coincideNombre || coincideEmail) {
+      return {
+        alcanzado: true,
+        turnoExistente: turno,
+        motivo: `Ya tenés un turno reservado hoy (${turno.horarioId} hs). Solo se permite 1 turno por día por persona.`,
+      };
+    }
+  }
+
+  return { alcanzado: false };
+}
+

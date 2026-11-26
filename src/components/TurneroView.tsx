@@ -13,6 +13,7 @@ import {
   evaluarBloqueoDia,
   obtenerFechaHoraArgentina,
   evaluarHorarioPasado,
+  evaluarLimiteTurnoDiario,
 } from '../utils/turnosLogic';
 import {
   Calendar,
@@ -55,6 +56,9 @@ interface TurneroViewProps {
   rolAcceso?: RolAcceso;
   usuarioAutenticado?: boolean;
   jugadorLogueado?: Jugador | null;
+  usuarioNombre?: string | null;
+  sessionEmail?: string | null;
+  userId?: string | null;
   onAbrirPerfil?: () => void;
   onLiberarTurno: (turnoId: string) => void;
   onBloquearMantenimiento?: (horarioId: string) => void;
@@ -87,6 +91,9 @@ export const TurneroView: React.FC<TurneroViewProps> = ({
   rolAcceso,
   usuarioAutenticado = false,
   jugadorLogueado = null,
+  usuarioNombre = null,
+  sessionEmail = null,
+  userId = null,
   onAbrirPerfil,
   onLiberarTurno,
   onBloquearMantenimiento,
@@ -128,6 +135,15 @@ export const TurneroView: React.FC<TurneroViewProps> = ({
   const turnosDelDia = obtenerTurnosDeFecha(turnos, fechaSeleccionada);
   const stats = calcularOcupacionFecha(turnosDelDia, horariosActivosParaStats);
   const proximosDias = generarProximosDias(clubConfig.diasAnticipacionReserva || 7, hoyArgentina);
+  const requiereRegistro = !usuarioAutenticado && !esStaff;
+  const limiteDiario = evaluarLimiteTurnoDiario({
+    turnos,
+    fechaSeleccionada,
+    esStaff,
+    nombreUsuario: jugadorLogueado?.nombre || (usuarioAutenticado ? usuarioNombre : null),
+    emailUsuario: sessionEmail || jugadorLogueado?.email,
+    userId,
+  });
 
   useEffect(() => {
     if (clubConfig.soloTurnosEnElDia !== false && fechaSeleccionada !== hoyArgentina) {
@@ -253,6 +269,65 @@ export const TurneroView: React.FC<TurneroViewProps> = ({
               Gestionar Bloqueo
             </button>
           )}
+        </div>
+      )}
+
+      {/* Aviso de Acceso Requerido para Invitados */}
+      {requiereRegistro && (
+        <div className="rounded-2xl border border-emerald-300 dark:border-emerald-800 bg-emerald-50/90 dark:bg-emerald-950/35 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-emerald-950 dark:text-emerald-100 text-xs shadow-xs">
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-xl bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 shrink-0">
+              <Lock className="w-4 h-4" />
+            </div>
+            <div className="space-y-0.5">
+              <div className="font-extrabold">Solo usuarios registrados pueden reservar turnos</div>
+              <p className="text-[11px] opacity-90">
+                Ingresá con tu cuenta o registrate como pelotari para poder reservar la cancha (máximo 1 turno por día).
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {onAbrirIngresar && (
+              <button
+                type="button"
+                onClick={onAbrirIngresar}
+                className="px-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 hover:bg-emerald-100 dark:hover:bg-slate-800 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 text-xs font-bold flex items-center gap-1.5 cursor-pointer transition"
+              >
+                <LogIn className="w-3.5 h-3.5" />
+                <span>Ingresar</span>
+              </button>
+            )}
+            {onAbrirRegistroJugador && (
+              <button
+                type="button"
+                onClick={onAbrirRegistroJugador}
+                className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer transition"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                <span>Registrarme</span>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Aviso de Límite Diario: 1 turno por día por persona */}
+      {!requiereRegistro && !esStaff && limiteDiario.alcanzado && (
+        <div
+          role="status"
+          className="rounded-2xl border border-amber-300 dark:border-amber-800 bg-amber-50/90 dark:bg-amber-950/35 p-4 flex items-start gap-3 text-amber-950 dark:text-amber-100 text-xs shadow-xs"
+        >
+          <div className="p-2 rounded-xl bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 shrink-0">
+            <CheckCircle2 className="w-4 h-4" />
+          </div>
+          <div className="space-y-0.5">
+            <div className="font-extrabold">
+              Ya tenés tu turno reservado para hoy ({limiteDiario.turnoExistente?.horarioId} hs)
+            </div>
+            <p className="text-[11px] opacity-90">
+              Solo se permite reservar 1 turno por día por persona. Si necesitás modificarlo o cancelarlo, comunicate con cantina o administración.
+            </p>
+          </div>
         </div>
       )}
 
@@ -919,7 +994,12 @@ export const TurneroView: React.FC<TurneroViewProps> = ({
                     ) : (
                       <div className="flex items-center gap-2 w-full">
                         {(() => {
-                          const reservaBloqueada = !ventanaReserva.habilitado || horarioPasado.pasado;
+                          const yaTieneTurnoHoy = !esStaff && limiteDiario.alcanzado;
+                          const reservaBloqueada =
+                            !ventanaReserva.habilitado ||
+                            horarioPasado.pasado ||
+                            requiereRegistro ||
+                            yaTieneTurnoHoy;
                           return (
                             <button
                               type="button"
@@ -939,9 +1019,13 @@ export const TurneroView: React.FC<TurneroViewProps> = ({
                                       ? `Horario finalizado (${h.inicio} hs)`
                                       : ventanaReserva.esDiaBloqueado
                                       ? 'Bloqueado por Evento'
-                                      : ventanaReserva.antesDeApertura
-                                      ? `Habilita ${String(ventanaReserva.horaApertura).padStart(2, '0')}:00 hs`
-                                      : 'Solo hoy'}
+                                      : !ventanaReserva.habilitado
+                                      ? ventanaReserva.antesDeApertura
+                                        ? `Habilita ${String(ventanaReserva.horaApertura).padStart(2, '0')}:00 hs`
+                                        : 'Solo hoy'
+                                      : requiereRegistro
+                                      ? 'Solo usuarios registrados'
+                                      : 'Máximo 1 turno por día'}
                                   </span>
                                 </>
                               ) : (
