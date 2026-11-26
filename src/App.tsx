@@ -68,7 +68,7 @@ import {
 import { storageService, STORAGE_KEYS } from './services/storageService';
 import { isSupabaseConfigured, supabase } from './lib/supabaseClient';
 import { supabaseRepository } from './services/supabaseRepository';
-import { CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, X } from 'lucide-react';
 
 export default function App() {
   const hoyAr = obtenerFechaHoraArgentina();
@@ -237,13 +237,22 @@ export default function App() {
     }, 1800);
   };
 
-  // Toast nativo
-  const [toastMsg, setToastMsg] = useState<string | null>(null);
+  // Toast / cartel informativo nativo (soporta multilínea en móvil y distingue alertas)
+  const [toastState, setToastState] = useState<{ msg: string; esAlerta: boolean } | null>(null);
+  const toastTimerRef = useRef<number | null>(null);
   const mostrarToast = useCallback((msg: string) => {
-    setToastMsg(msg);
-    setTimeout(() => {
-      setToastMsg((prev) => (prev === msg ? null : prev));
-    }, 3800);
+    const esAlerta =
+      /^(error\b|atenci[oó]n\b|solo\b|acceso\b|el horario\b|el turno de las\b|el jugador\b|las reservas\b|los turnos\b|no (se pudo|es posible|puedes|podés))/i.test(
+        msg.trim()
+      ) || /ya comenz[oó]|ya finaliz[oó]|bloquead[oa]|suspendid[oa]/i.test(msg);
+
+    if (toastTimerRef.current) {
+      window.clearTimeout(toastTimerRef.current);
+    }
+    setToastState({ msg, esAlerta });
+    toastTimerRef.current = window.setTimeout(() => {
+      setToastState((prev) => (prev?.msg === msg ? null : prev));
+    }, esAlerta ? 6500 : 4000);
   }, []);
 
   // Diálogo de confirmación accesible (sin window.confirm)
@@ -1162,7 +1171,7 @@ export default function App() {
     nuevoTurno: Turno,
     pagadoAhora: boolean,
     metodoPago?: MetodoPago
-  ) => {
+  ): Promise<{ ok: boolean; error?: string }> => {
     const ventana = evaluarVentanaReserva({
       fechaSeleccionada: nuevoTurno.fecha,
       soloTurnosEnElDia: clubConfig.soloTurnosEnElDia,
@@ -1171,8 +1180,9 @@ export default function App() {
       esStaff: permisos.esStaff,
     });
     if (!ventana.habilitado) {
-      mostrarToast(ventana.motivo || 'Los turnos se habilitan en el día desde las 08:00 hs.');
-      return;
+      const msg = ventana.motivo || 'Los turnos se habilitan en el día desde las 08:00 hs.';
+      mostrarToast(msg);
+      return { ok: false, error: msg };
     }
 
     const horarioSlot = horarios.find((h) => h.id === nuevoTurno.horarioId);
@@ -1182,8 +1192,9 @@ export default function App() {
         inicio: horarioSlot.inicio,
       });
       if (horarioPasado.pasado) {
-        mostrarToast(horarioPasado.motivo || 'El horario de este turno ya comenzó o finalizó.');
-        return;
+        const msg = horarioPasado.motivo || 'El horario de este turno ya comenzó o finalizó.';
+        mostrarToast(msg);
+        return { ok: false, error: msg };
       }
     }
 
@@ -1208,12 +1219,13 @@ export default function App() {
         }
         setModalReservaHorarioId(null);
         mostrarToast(`Turno reservado y sincronizado para el ${guardado.fecha}`);
+        return { ok: true };
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'No se pudo completar la reserva.';
         mostrarToast(`Error: ${msg}`);
         void cargarDatosPublicos();
+        return { ok: false, error: msg };
       }
-      return;
     }
 
     setTurnos((prev) => ({
@@ -1240,6 +1252,7 @@ export default function App() {
 
     setModalReservaHorarioId(null);
     mostrarToast(`Turno reservado para el ${turnoConAudit.fecha}`);
+    return { ok: true };
   };
 
   const handleLiberarTurno = async (turnoIdOrHorarioId: string) => {
@@ -2344,15 +2357,48 @@ export default function App() {
       {/* Auto-actualización automática de PWA */}
       <PWAUpdater />
 
-      {/* Toast Notification estilo App Móvil Nativa */}
-      {toastMsg && (
+      {/* Cartel / Toast Notification visible y multilínea en móvil y escritorio */}
+      {toastState && (
         <div
-          role="status"
-          aria-live="polite"
-          className="fixed bottom-20 md:bottom-5 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-2xl bg-slate-900/95 dark:bg-slate-100/95 text-white dark:text-slate-900 text-xs font-bold shadow-2xl backdrop-blur-md flex items-center gap-2 border border-slate-700/50 dark:border-slate-300 pointer-events-none max-w-[92vw]"
+          role={toastState.esAlerta ? 'alert' : 'status'}
+          aria-live={toastState.esAlerta ? 'assertive' : 'polite'}
+          className={`fixed top-4 left-1/2 -translate-x-1/2 z-[70] w-[calc(100%-1.5rem)] max-w-md px-4 py-3.5 rounded-2xl shadow-2xl backdrop-blur-md flex items-start gap-3 border transition-all ${
+            toastState.esAlerta
+              ? 'bg-rose-600 dark:bg-rose-950/95 text-white dark:text-rose-100 border-rose-400/60 dark:border-rose-700'
+              : 'bg-slate-900/95 dark:bg-slate-100/95 text-white dark:text-slate-900 border-slate-700/50 dark:border-slate-300'
+          }`}
         >
-          <CheckCircle2 className="w-4 h-4 text-emerald-400 dark:text-emerald-600 shrink-0" />
-          <span className="truncate">{toastMsg}</span>
+          <div
+            className={`p-1.5 rounded-xl shrink-0 mt-0.5 ${
+              toastState.esAlerta
+                ? 'bg-white/20 text-white dark:bg-rose-900 dark:text-rose-300'
+                : 'bg-emerald-500/20 text-emerald-400 dark:text-emerald-600'
+            }`}
+          >
+            {toastState.esAlerta ? (
+              <AlertTriangle className="w-4 h-4" />
+            ) : (
+              <CheckCircle2 className="w-4 h-4" />
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            {toastState.esAlerta && (
+              <div className="text-[11px] font-extrabold uppercase tracking-wider opacity-90 mb-0.5">
+                Aviso importante
+              </div>
+            )}
+            <p className="text-xs sm:text-sm font-semibold leading-snug break-words">
+              {toastState.msg}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setToastState(null)}
+            aria-label="Cerrar aviso"
+            className="p-1 rounded-lg opacity-75 hover:opacity-100 hover:bg-black/10 dark:hover:bg-white/10 transition shrink-0 cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
     </div>
