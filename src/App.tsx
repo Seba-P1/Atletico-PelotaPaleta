@@ -49,6 +49,7 @@ import {
   evaluarHorarioPasado,
   evaluarLimiteTurnoDiario,
   obtenerFechaHoraArgentina,
+  calcularCostoTurno,
 } from './utils/turnosLogic';
 import {
   buscarJugadorPorEmail,
@@ -545,22 +546,22 @@ export default function App() {
 
     const { data: authListener } = supabase
       ? supabase.auth.onAuthStateChange(async (event) => {
-          if (!activo) return;
-          if (event === 'SIGNED_OUT') {
-            setUsuarioAutenticado(false);
-            setRolAcceso('guest');
-            setAdminEmail(null);
-            setSessionEmail(null);
-            setSessionUserId(null);
-            setNombreUsuario('Socio Pelotari');
-            setVistaActiva('turnos');
-            return;
-          }
-          if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-            await cargarDatosPublicos();
-            await aplicarSesionSupabase();
-          }
-        })
+        if (!activo) return;
+        if (event === 'SIGNED_OUT') {
+          setUsuarioAutenticado(false);
+          setRolAcceso('guest');
+          setAdminEmail(null);
+          setSessionEmail(null);
+          setSessionUserId(null);
+          setNombreUsuario('Socio Pelotari');
+          setVistaActiva('turnos');
+          return;
+        }
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          await cargarDatosPublicos();
+          await aplicarSesionSupabase();
+        }
+      })
       : { data: { subscription: null } };
 
     return () => {
@@ -750,8 +751,8 @@ export default function App() {
       res.rol === 'super_admin'
         ? 'Acceso de Comisión Directiva habilitado automáticamente'
         : res.rol === 'cantinero'
-        ? 'Acceso de Cantina y Turnos habilitado'
-        : `¡Bienvenido/a, ${res.nombreMostrado}!`
+          ? 'Acceso de Cantina y Turnos habilitado'
+          : `¡Bienvenido/a, ${res.nombreMostrado}!`
     );
   };
 
@@ -772,8 +773,8 @@ export default function App() {
         session.rolAcceso === 'super_admin'
           ? 'Comisión Directiva (Super Admin)'
           : session.rolAcceso === 'cantinero'
-          ? 'Encargado de Cantina y Turnos'
-          : 'Pelotari';
+            ? 'Encargado de Cantina y Turnos'
+            : 'Pelotari';
       mostrarToast(`Permiso actualizado: ${etiquetaRol}`);
       return { etiquetaRol };
     }
@@ -1250,8 +1251,17 @@ export default function App() {
       return { ok: false, error: msg };
     }
 
+    const costoCalculado = horarioSlot
+      ? calcularCostoTurno(horarioSlot, nuevoTurno.p1, nuevoTurno.p2, jugadores)
+      : (nuevoTurno.costoTotal ?? 0);
+    const pagadoEfectivo = Boolean(permisos.esStaff && pagadoAhora && costoCalculado > 0);
+    const metodoPagoEfectivo = pagadoEfectivo ? metodoPago : undefined;
+
     const turnoConAudit: Turno = {
       ...nuevoTurno,
+      costoTotal: costoCalculado,
+      pagado: pagadoEfectivo,
+      metodoPago: metodoPagoEfectivo,
       registradoPor: permisos.esStaff ? operadorNombre : nuevoTurno.organizadorNombre || nombreUsuario,
       registradoUserId: sessionUserId || sessionEmail || undefined,
     };
@@ -1260,8 +1270,8 @@ export default function App() {
       try {
         const guardado = await supabaseRepository.reservarTurnoRpc(
           turnoConAudit,
-          permisos.esStaff ? pagadoAhora : false,
-          permisos.esStaff ? metodoPago : undefined
+          pagadoEfectivo,
+          metodoPagoEfectivo
         );
         setTurnos((prev) => ({
           ...prev,
@@ -1387,6 +1397,13 @@ export default function App() {
     notas: string
   ) => {
     if (!permisos.esStaff) return;
+    const existente = turnos[turnoId];
+    const hor = existente ? horarios.find((h) => h.id === existente.horarioId) : undefined;
+    const nuevoCosto =
+      existente && !existente.pagado && hor
+        ? calcularCostoTurno(hor, p1, p2, jugadores)
+        : undefined;
+
     if (supabaseConectado) {
       try {
         const actualizado = await supabaseRepository.actualizarTurno(
@@ -1394,7 +1411,8 @@ export default function App() {
           p1,
           p2,
           organizadorNombre,
-          notas
+          notas,
+          nuevoCosto
         );
         setTurnos((prev) => ({
           ...prev,
@@ -1408,16 +1426,17 @@ export default function App() {
     }
 
     setTurnos((prev) => {
-      const existente = prev[turnoId];
-      if (!existente) return prev;
+      const actual = prev[turnoId];
+      if (!actual) return prev;
       return {
         ...prev,
         [turnoId]: {
-          ...existente,
+          ...actual,
           p1,
           p2,
           organizadorNombre,
           notas: notas.trim() || undefined,
+          ...(nuevoCosto !== undefined ? { costoTotal: nuevoCosto } : {}),
           registradoPor: operadorNombre,
         },
       };
@@ -1430,7 +1449,18 @@ export default function App() {
     const t = turnos[turnoId];
     if (!t) return;
 
-    const costo = t.costoTotal || 12000;
+    const hor = horarios.find((h) => h.id === t.horarioId);
+    const costo =
+      t.costoTotal !== undefined
+        ? t.costoTotal
+        : hor
+        ? calcularCostoTurno(hor, t.p1, t.p2, jugadores)
+        : 0;
+
+    if (costo <= 0) {
+      mostrarToast('Este turno está bonificado (todos pelotaris registrados). No corresponde cobro de cancha.');
+      return;
+    }
     const ahora = new Date();
     const nuevoMov: MovimientoCaja = {
       id: `mov-${Date.now()}`,
@@ -2085,17 +2115,17 @@ export default function App() {
             onIrAAdminPublicaciones={
               permisos.esSuperAdmin
                 ? () => {
-                    setSeccionAdmin('publicaciones');
-                    setVistaActiva('admin');
-                  }
+                  setSeccionAdmin('publicaciones');
+                  setVistaActiva('admin');
+                }
                 : undefined
             }
             onIrAAdminEventos={
               permisos.esSuperAdmin
                 ? () => {
-                    setSeccionAdmin('eventos');
-                    setVistaActiva('admin');
-                  }
+                  setSeccionAdmin('eventos');
+                  setVistaActiva('admin');
+                }
                 : undefined
             }
             onAbrirIngresar={abrirLogin}
@@ -2422,18 +2452,16 @@ export default function App() {
         <div
           role={toastState.esAlerta ? 'alert' : 'status'}
           aria-live={toastState.esAlerta ? 'assertive' : 'polite'}
-          className={`fixed top-4 left-1/2 -translate-x-1/2 z-[70] w-[calc(100%-1.5rem)] max-w-md px-4 py-3.5 rounded-2xl shadow-2xl backdrop-blur-md flex items-start gap-3 border transition-all ${
-            toastState.esAlerta
-              ? 'bg-rose-600 dark:bg-rose-950/95 text-white dark:text-rose-100 border-rose-400/60 dark:border-rose-700'
-              : 'bg-slate-900/95 dark:bg-slate-100/95 text-white dark:text-slate-900 border-slate-700/50 dark:border-slate-300'
-          }`}
+          className={`fixed top-4 left-1/2 -translate-x-1/2 z-[70] w-[calc(100%-1.5rem)] max-w-md px-4 py-3.5 rounded-2xl shadow-2xl backdrop-blur-md flex items-start gap-3 border transition-all ${toastState.esAlerta
+            ? 'bg-rose-600 dark:bg-rose-950/95 text-white dark:text-rose-100 border-rose-400/60 dark:border-rose-700'
+            : 'bg-slate-900/95 dark:bg-slate-100/95 text-white dark:text-slate-900 border-slate-700/50 dark:border-slate-300'
+            }`}
         >
           <div
-            className={`p-1.5 rounded-xl shrink-0 mt-0.5 ${
-              toastState.esAlerta
-                ? 'bg-white/20 text-white dark:bg-rose-900 dark:text-rose-300'
-                : 'bg-emerald-500/20 text-emerald-400 dark:text-emerald-600'
-            }`}
+            className={`p-1.5 rounded-xl shrink-0 mt-0.5 ${toastState.esAlerta
+              ? 'bg-white/20 text-white dark:bg-rose-900 dark:text-rose-300'
+              : 'bg-emerald-500/20 text-emerald-400 dark:text-emerald-600'
+              }`}
           >
             {toastState.esAlerta ? (
               <AlertTriangle className="w-4 h-4" />

@@ -519,7 +519,49 @@ $$;
 
 GRANT EXECUTE ON FUNCTION public.canjear_codigo_acceso(text, text) TO authenticated;
 
--- 6.1 Reservar turno de manera atómica (solo hoy desde 08:00 hs AR para jugadores + evento bloqueado)
+-- 6.0b Determinar si el turno incluye algún invitado no registrado
+CREATE OR REPLACE FUNCTION public.turno_tiene_invitado(
+  p_p1 jsonb,
+  p_p2 jsonb
+)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  WITH slots AS (
+    SELECT trim(COALESCE(val, '')) AS nombre
+    FROM unnest(ARRAY[
+      p_p1->>'delantero',
+      p_p1->>'zaguero',
+      p_p2->>'delantero',
+      p_p2->>'zaguero'
+    ]) AS val
+  ),
+  nombres_activos AS (
+    SELECT nombre
+    FROM slots
+    WHERE nombre <> ''
+      AND lower(nombre) NOT IN ('a confirmar', 'por definir')
+  )
+  SELECT EXISTS (
+    SELECT 1
+    FROM nombres_activos s
+    WHERE s.nombre ~* '^invitado\s*:'
+       OR NOT EXISTS (
+         SELECT 1
+         FROM public.jugadores j
+         WHERE j.activo = true
+           AND lower(trim(j.nombre)) = lower(s.nombre)
+       )
+  );
+$$;
+
+REVOKE ALL ON FUNCTION public.turno_tiene_invitado(jsonb, jsonb) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.turno_tiene_invitado(jsonb, jsonb) TO authenticated;
+
+-- 6.1 Reservar turno de manera atómica (solo hoy desde 08:00 hs AR + costo solo con invitados)
 CREATE OR REPLACE FUNCTION public.reservar_turno(
   p_horario_id text,
   p_fecha date,
@@ -554,6 +596,7 @@ DECLARE
   v_user_id uuid;
   v_email text;
   v_jugador_nombre text;
+  v_tiene_invitado boolean;
 BEGIN
   v_user_id := auth.uid();
   IF v_user_id IS NULL THEN
@@ -660,9 +703,19 @@ BEGIN
     ELSE COALESCE(NULLIF(trim(p_organizador_nombre), ''), 'Jugador')
   END;
 
-  v_pagado := CASE WHEN v_es_staff THEN COALESCE(p_pagado, false) ELSE false END;
+  -- All 4 player slots must be filled
+  IF trim(COALESCE(p_p1->>'delantero', '')) = '' OR trim(COALESCE(p_p1->>'zaguero', '')) = ''
+     OR trim(COALESCE(p_p2->>'delantero', '')) = '' OR trim(COALESCE(p_p2->>'zaguero', '')) = '' THEN
+    RAISE EXCEPTION 'Todos los puestos deben estar completos (4 pelotaris). Si algún jugador no está registrado, usá la opción Invitado.';
+  END IF;
+
+  v_tiene_invitado := public.turno_tiene_invitado(p_p1, p_p2);
+  v_costo_total := CASE
+    WHEN v_tiene_invitado THEN COALESCE(v_horario.precio_cancha, 0) + COALESCE(v_horario.precio_luz, 0)
+    ELSE 0
+  END;
+  v_pagado := CASE WHEN v_es_staff AND v_costo_total > 0 THEN COALESCE(p_pagado, false) ELSE false END;
   v_metodo := CASE WHEN v_pagado THEN p_metodo_pago ELSE NULL END;
-  v_costo_total := COALESCE(v_horario.precio_cancha, 0) + COALESCE(v_horario.precio_luz, 0);
   v_turno_id := to_char(p_fecha, 'YYYY-MM-DD') || '__' || p_horario_id;
 
   INSERT INTO public.turnos (
@@ -739,6 +792,7 @@ DECLARE
   v_costo numeric;
   v_now_ar timestamp;
   v_operador text;
+  v_tiene_invitado boolean;
 BEGIN
   IF NOT public.is_club_staff() THEN
     RAISE EXCEPTION 'Acceso denegado: solo el personal autorizado puede cobrar turnos.';
@@ -754,6 +808,12 @@ BEGIN
   END IF;
 
   SELECT * INTO v_horario FROM public.horarios_config WHERE id = v_turno.horario_id;
+  v_tiene_invitado := public.turno_tiene_invitado(v_turno.p1, v_turno.p2);
+  IF NOT v_tiene_invitado THEN
+    UPDATE public.turnos SET costo_total = 0 WHERE id = p_turno_id;
+    RAISE EXCEPTION 'Este turno está bonificado porque todos los pelotaris están registrados (sin invitados).';
+  END IF;
+
   v_costo := GREATEST(
     COALESCE(v_turno.costo_total, 0),
     COALESCE(v_horario.precio_cancha, 0) + COALESCE(v_horario.precio_luz, 0)

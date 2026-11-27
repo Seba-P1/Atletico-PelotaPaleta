@@ -369,19 +369,17 @@ export const TurneroView: React.FC<TurneroViewProps> = ({
         return (
           <div
             role="alert"
-            className={`rounded-2xl border p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs ${
-              esCritico
+            className={`rounded-2xl border p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs ${esCritico
                 ? 'bg-rose-50 dark:bg-rose-950/35 border-rose-300 dark:border-rose-800/70 text-rose-900 dark:text-rose-100'
                 : 'bg-amber-50 dark:bg-amber-950/35 border-amber-300 dark:border-amber-700/70 text-amber-950 dark:text-amber-100'
-            }`}
+              }`}
           >
             <div className="flex items-start gap-3">
               <div
-                className={`p-2 rounded-xl shrink-0 ${
-                  esCritico
+                className={`p-2 rounded-xl shrink-0 ${esCritico
                     ? 'bg-rose-100 dark:bg-rose-900/50 text-rose-700 dark:text-rose-300'
                     : 'bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300'
-                }`}
+                  }`}
               >
                 {estado.bloqueadoTurnos ? (
                   <Ban className="w-5 h-5" />
@@ -394,8 +392,8 @@ export const TurneroView: React.FC<TurneroViewProps> = ({
                   {estado.bloqueadoTurnos
                     ? 'Tus reservas de turnos están bloqueadas por la Comisión Directiva'
                     : estado.mensualidadVencida
-                    ? 'Aviso de mensualidad vencida y saldo pendiente'
-                    : 'Aviso importante sobre tu cuenta de pelotari'}
+                      ? 'Aviso de mensualidad vencida y saldo pendiente'
+                      : 'Aviso importante sobre tu cuenta de pelotari'}
                 </div>
                 <div className="text-[11px] opacity-90 space-y-0.5">
                   {!estado.mensualidadPaga &&
@@ -417,11 +415,10 @@ export const TurneroView: React.FC<TurneroViewProps> = ({
               <button
                 type="button"
                 onClick={onAbrirPerfil}
-                className={`px-3.5 py-2 rounded-xl text-xs font-bold shrink-0 transition cursor-pointer ${
-                  esCritico
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold shrink-0 transition cursor-pointer ${esCritico
                     ? 'bg-rose-600 hover:bg-rose-700 text-white'
                     : 'bg-amber-600 hover:bg-amber-700 text-white'
-                }`}
+                  }`}
               >
                 Ver Mi Perfil
               </button>
@@ -484,16 +481,14 @@ export const TurneroView: React.FC<TurneroViewProps> = ({
                   key={dia.fecha}
                   type="button"
                   onClick={() => setFechaSeleccionada(dia.fecha)}
-                  className={`flex flex-col items-center justify-center min-w-[66px] px-3 py-2 rounded-xl border text-center transition cursor-pointer shrink-0 ${
-                    seleccionado
+                  className={`flex flex-col items-center justify-center min-w-[66px] px-3 py-2 rounded-xl border text-center transition cursor-pointer shrink-0 ${seleccionado
                       ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
                       : 'bg-slate-50 dark:bg-slate-950 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:border-emerald-400'
-                  }`}
+                    }`}
                 >
                   <span
-                    className={`text-[10px] font-extrabold tracking-wider ${
-                      seleccionado ? 'text-emerald-100' : 'text-slate-400'
-                    }`}
+                    className={`text-[10px] font-extrabold tracking-wider ${seleccionado ? 'text-emerald-100' : 'text-slate-400'
+                      }`}
                   >
                     {dia.diaSemana}
                   </span>
@@ -501,9 +496,8 @@ export const TurneroView: React.FC<TurneroViewProps> = ({
                     {dia.numeroDia}
                   </span>
                   <span
-                    className={`text-[10px] capitalize ${
-                      seleccionado ? 'text-emerald-100' : 'text-slate-500 dark:text-slate-400'
-                    }`}
+                    className={`text-[10px] capitalize ${seleccionado ? 'text-emerald-100' : 'text-slate-500 dark:text-slate-400'
+                      }`}
                   >
                     {dia.mesCorto}
                   </span>
@@ -609,8 +603,8 @@ export const TurneroView: React.FC<TurneroViewProps> = ({
                         {promo.categoria === 'comida'
                           ? 'Comida'
                           : promo.categoria === 'bebida'
-                          ? 'Bebida'
-                          : 'Combo Buffet'}
+                            ? 'Bebida'
+                            : 'Combo Buffet'}
                       </span>
                     </span>
                     {promo.precio && (
@@ -661,11 +655,10 @@ export const TurneroView: React.FC<TurneroViewProps> = ({
               return (
                 <div
                   key={pub.id}
-                  className={`p-5 rounded-2xl border transition shadow-xs flex flex-col justify-between gap-3 ${
-                    pub.destacado
+                  className={`p-5 rounded-2xl border transition shadow-xs flex flex-col justify-between gap-3 ${pub.destacado
                       ? 'bg-gradient-to-br from-white via-emerald-50/20 to-slate-50 dark:from-slate-900 dark:via-slate-900 dark:to-emerald-950/30 border-emerald-400 dark:border-emerald-600'
                       : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'
-                  }`}
+                    }`}
                 >
                   <div className="space-y-2">
                     <div className="flex items-center justify-between gap-2 text-xs">
@@ -719,8 +712,8 @@ export const TurneroView: React.FC<TurneroViewProps> = ({
               {esStaff
                 ? 'Modo Operativo: podés reservar, editar parejas o invitados, cobrar y liberar turnos.'
                 : clubConfig.soloTurnosEnElDia !== false
-                ? `Reservas abiertas en el día a partir de las ${String(clubConfig.horaAperturaTurnos ?? 8).padStart(2, '0')}:00 hs.`
-                : 'Selecciona un turno libre para reservar la cancha.'}
+                  ? `Reservas abiertas en el día a partir de las ${String(clubConfig.horaAperturaTurnos ?? 8).padStart(2, '0')}:00 hs.`
+                  : 'Selecciona un turno libre para reservar la cancha.'}
             </p>
           </div>
 
@@ -758,17 +751,16 @@ export const TurneroView: React.FC<TurneroViewProps> = ({
               return (
                 <div
                   key={h.id}
-                  className={`flex flex-col justify-between rounded-2xl border p-4.5 transition-all duration-200 shadow-xs ${
-                    estaInactivo
+                  className={`flex flex-col justify-between rounded-2xl border p-4.5 transition-all duration-200 shadow-xs ${estaInactivo
                       ? 'bg-slate-100 dark:bg-slate-950/80 border-dashed border-slate-300 dark:border-slate-700 opacity-80'
                       : ocupado
-                      ? 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'
-                      : mantenimiento
-                      ? 'bg-slate-100 dark:bg-slate-950 border-slate-300 dark:border-slate-700 opacity-85'
-                      : noDisponiblePorPasado
-                      ? 'bg-slate-100/90 dark:bg-slate-950/80 border-slate-200 dark:border-slate-800 opacity-75'
-                      : 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-300 dark:border-emerald-800/50 hover:border-emerald-500 dark:hover:border-emerald-600 hover:shadow-sm'
-                  }`}
+                        ? 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'
+                        : mantenimiento
+                          ? 'bg-slate-100 dark:bg-slate-950 border-slate-300 dark:border-slate-700 opacity-85'
+                          : noDisponiblePorPasado
+                            ? 'bg-slate-100/90 dark:bg-slate-950/80 border-slate-200 dark:border-slate-800 opacity-75'
+                            : 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-300 dark:border-emerald-800/50 hover:border-emerald-500 dark:hover:border-emerald-600 hover:shadow-sm'
+                    }`}
                 >
                   <div>
                     {/* Card Header */}
@@ -781,7 +773,7 @@ export const TurneroView: React.FC<TurneroViewProps> = ({
                           </span>
                         </div>
                         <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 tabular-nums">
-                          Cancha {formatearMoneda(h.precioCancha)} {h.precioLuz > 0 && `· Luz ${formatearMoneda(h.precioLuz)}`}
+                          Invitados: {formatearMoneda(h.precioCancha + h.precioLuz)} (Cancha {formatearMoneda(h.precioCancha)}{h.precioLuz > 0 ? ` + Luz ${formatearMoneda(h.precioLuz)}` : ''})
                         </div>
                       </div>
 
@@ -892,7 +884,9 @@ export const TurneroView: React.FC<TurneroViewProps> = ({
                               Org: <strong className="text-slate-800 dark:text-slate-200">{turno.organizadorNombre || 'Club'}</strong>
                             </span>
                             <span>
-                              {turno.pagado ? (
+                              {(turno.costoTotal ?? h.precioCancha + h.precioLuz) === 0 ? (
+                                <span className="text-emerald-700 dark:text-emerald-400 font-bold">Sin cargo (Socios) ✅</span>
+                              ) : turno.pagado ? (
                                 <span className="text-emerald-700 dark:text-emerald-400 font-bold">Abonado ✅</span>
                               ) : (
                                 <span className="text-slate-600 dark:text-slate-400 font-semibold">Abonar en cantina ⏳</span>
@@ -914,8 +908,11 @@ export const TurneroView: React.FC<TurneroViewProps> = ({
                       ) : (
                         <div className="py-4 text-center text-xs text-slate-500 dark:text-slate-400 space-y-1.5">
                           <p>Cancha libre para partido de 4 pelotaris (2 parejas).</p>
-                          <div className="text-emerald-700 dark:text-emerald-400 font-bold text-xs tabular-nums">
-                            Total turno: {formatearMoneda(h.precioCancha + h.precioLuz)}
+                          <div className="text-emerald-700 dark:text-emerald-400 font-bold text-xs">
+                            Pelotaris registrados: Sin cargo (Mensualidad)
+                          </div>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
+                            Con invitado no registrado: {formatearMoneda(h.precioCancha + h.precioLuz)}
                           </div>
                         </div>
                       )}
@@ -1005,11 +1002,10 @@ export const TurneroView: React.FC<TurneroViewProps> = ({
                               type="button"
                               disabled={reservaBloqueada}
                               onClick={() => onAbrirReserva(h.id)}
-                              className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition ${
-                                reservaBloqueada
+                              className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition ${reservaBloqueada
                                   ? 'bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400 cursor-not-allowed'
                                   : 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer'
-                              }`}
+                                }`}
                             >
                               {reservaBloqueada ? (
                                 <>
@@ -1018,14 +1014,14 @@ export const TurneroView: React.FC<TurneroViewProps> = ({
                                     {horarioPasado.pasado
                                       ? `Horario finalizado (${h.inicio} hs)`
                                       : ventanaReserva.esDiaBloqueado
-                                      ? 'Bloqueado por Evento'
-                                      : !ventanaReserva.habilitado
-                                      ? ventanaReserva.antesDeApertura
-                                        ? `Habilita ${String(ventanaReserva.horaApertura).padStart(2, '0')}:00 hs`
-                                        : 'Solo hoy'
-                                      : requiereRegistro
-                                      ? 'Solo usuarios registrados'
-                                      : 'Máximo 1 turno por día'}
+                                        ? 'Bloqueado por Evento'
+                                        : !ventanaReserva.habilitado
+                                          ? ventanaReserva.antesDeApertura
+                                            ? `Habilita ${String(ventanaReserva.horaApertura).padStart(2, '0')}:00 hs`
+                                            : 'Solo hoy'
+                                          : requiereRegistro
+                                            ? 'Solo usuarios registrados'
+                                            : 'Máximo 1 turno por día'}
                                   </span>
                                 </>
                               ) : (

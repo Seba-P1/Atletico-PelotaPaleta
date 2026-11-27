@@ -9,7 +9,9 @@ import {
   normalizarTurnosLegacy,
   obtenerTurnosDeFecha,
   calcularOcupacionFecha,
-  generarProximosDias
+  generarProximosDias,
+  tieneInvitadoEnTurno,
+  calcularCostoTurno
 } from './turnosLogic';
 import {
   calcularTotalComanda,
@@ -33,33 +35,36 @@ test('validarReserva rechaza cuando los 4 puestos están vacíos (0 jugadores)',
   const p2 = { nombre: 'P2', delantero: '', zaguero: '' };
   const res = validarReserva(p1, p2, '');
   assert.equal(res.valido, false);
-  assert.match(res.error || '', /al menos 1 pelotari/i);
+  assert.match(res.error || '', /Todos los puestos deben estar completos/i);
 });
 
-test('validarReserva aprueba cuando hay 1, 2 o 3 jugadores sin repetidos', () => {
-  // 1 jugador
+test('validarReserva rechaza cuando faltan puestos (1, 2 o 3 jugadores)', () => {
+  // 1 jugador — falta 3 puestos
   const r1 = validarReserva(
     { nombre: 'P1', delantero: 'Facundo Andreasen', zaguero: '' },
     { nombre: 'P2', delantero: '', zaguero: '' },
     'Facundo Andreasen'
   );
-  assert.equal(r1.valido, true);
+  assert.equal(r1.valido, false);
+  assert.match(r1.error || '', /Todos los puestos deben estar completos/i);
 
-  // 2 jugadores
+  // 2 jugadores — falta 2 puestos
   const r2 = validarReserva(
     { nombre: 'P1', delantero: 'Facundo Andreasen', zaguero: '' },
     { nombre: 'P2', delantero: 'Gabriel Villegas', zaguero: '' },
     'Facundo Andreasen'
   );
-  assert.equal(r2.valido, true);
+  assert.equal(r2.valido, false);
+  assert.match(r2.error || '', /Falta/);
 
-  // 3 jugadores
+  // 3 jugadores — falta 1 puesto
   const r3 = validarReserva(
     { nombre: 'P1', delantero: 'Facundo Andreasen', zaguero: 'Santiago Andreasen' },
     { nombre: 'P2', delantero: 'Gabriel Villegas', zaguero: '' },
     'Facundo Andreasen'
   );
-  assert.equal(r3.valido, true);
+  assert.equal(r3.valido, false);
+  assert.match(r3.error || '', /Zaguero 2/);
 });
 
 test('validarReserva rechaza jugadores repetidos en el mismo turno', () => {
@@ -68,14 +73,6 @@ test('validarReserva rechaza jugadores repetidos en el mismo turno', () => {
   const res = validarReserva(p1, p2, 'Facundo Andreasen');
   assert.equal(res.valido, false);
   assert.match(res.error || '', /repetir el mismo jugador/);
-
-  // Repetido incluso con solo 2 jugadores
-  const res2 = validarReserva(
-    { nombre: 'P1', delantero: 'Facundo Andreasen', zaguero: '' },
-    { nombre: 'P2', delantero: 'Facundo Andreasen', zaguero: '' },
-    'Facundo Andreasen'
-  );
-  assert.equal(res2.valido, false);
 });
 
 test('validarReserva aprueba 4 jugadores distintos con organizador participante', () => {
@@ -83,6 +80,55 @@ test('validarReserva aprueba 4 jugadores distintos con organizador participante'
   const p2 = { nombre: 'P2', delantero: 'Gabriel Villegas', zaguero: 'Alfredo Villegas' };
   const res = validarReserva(p1, p2, 'Facundo Andreasen');
   assert.equal(res.valido, true);
+});
+
+// --- tieneInvitadoEnTurno ---
+
+const jugadoresRegistrados: Jugador[] = [
+  { id: 1, nombre: 'Facundo Andreasen', rol: 'Delantero', categoria: '1ra', telefono: '', saldoCuentaCorriente: 0, activo: true },
+  { id: 2, nombre: 'Santiago Andreasen', rol: 'Zaguero', categoria: '1ra', telefono: '', saldoCuentaCorriente: 0, activo: true },
+  { id: 3, nombre: 'Gabriel Villegas', rol: 'Delantero', categoria: '1ra', telefono: '', saldoCuentaCorriente: 0, activo: true },
+  { id: 4, nombre: 'Alfredo Villegas', rol: 'Zaguero', categoria: '1ra', telefono: '', saldoCuentaCorriente: 0, activo: true },
+];
+
+test('tieneInvitadoEnTurno devuelve false cuando todos están registrados', () => {
+  const p1 = { nombre: 'P1', delantero: 'Facundo Andreasen', zaguero: 'Santiago Andreasen' };
+  const p2 = { nombre: 'P2', delantero: 'Gabriel Villegas', zaguero: 'Alfredo Villegas' };
+  assert.equal(tieneInvitadoEnTurno(p1, p2, jugadoresRegistrados), false);
+});
+
+test('tieneInvitadoEnTurno devuelve true cuando hay un "Invitado: X"', () => {
+  const p1 = { nombre: 'P1', delantero: 'Invitado: Juan Pérez', zaguero: 'Santiago Andreasen' };
+  const p2 = { nombre: 'P2', delantero: 'Gabriel Villegas', zaguero: 'Alfredo Villegas' };
+  assert.equal(tieneInvitadoEnTurno(p1, p2, jugadoresRegistrados), true);
+});
+
+test('tieneInvitadoEnTurno devuelve true cuando un nombre no está en el padrón', () => {
+  const p1 = { nombre: 'P1', delantero: 'Facundo Andreasen', zaguero: 'Santiago Andreasen' };
+  const p2 = { nombre: 'P2', delantero: 'Carlos Desconocido', zaguero: 'Alfredo Villegas' };
+  assert.equal(tieneInvitadoEnTurno(p1, p2, jugadoresRegistrados), true);
+});
+
+test('tieneInvitadoEnTurno devuelve false cuando no hay slots ocupados', () => {
+  const p1 = { nombre: 'P1', delantero: '', zaguero: '' };
+  const p2 = { nombre: 'P2', delantero: '', zaguero: '' };
+  assert.equal(tieneInvitadoEnTurno(p1, p2, jugadoresRegistrados), false);
+});
+
+// --- calcularCostoTurno ---
+
+const horarioTest = { precioCancha: 8000, precioLuz: 4000 };
+
+test('calcularCostoTurno devuelve 0 cuando todos son socios registrados', () => {
+  const p1 = { nombre: 'P1', delantero: 'Facundo Andreasen', zaguero: 'Santiago Andreasen' };
+  const p2 = { nombre: 'P2', delantero: 'Gabriel Villegas', zaguero: 'Alfredo Villegas' };
+  assert.equal(calcularCostoTurno(horarioTest, p1, p2, jugadoresRegistrados), 0);
+});
+
+test('calcularCostoTurno devuelve tarifa completa cuando hay invitado', () => {
+  const p1 = { nombre: 'P1', delantero: 'Invitado: Juan Pérez', zaguero: 'Santiago Andreasen' };
+  const p2 = { nombre: 'P2', delantero: 'Gabriel Villegas', zaguero: 'Alfredo Villegas' };
+  assert.equal(calcularCostoTurno(horarioTest, p1, p2, jugadoresRegistrados), 12000);
 });
 
 test('calcularJugadoresOcupados extrae delanteros y zagueros de turnos ocupados', () => {

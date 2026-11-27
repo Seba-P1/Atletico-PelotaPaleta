@@ -315,16 +315,18 @@ export const AdminMetricasSection: React.FC<AdminMetricasSectionProps> = ({
                     </td>
                     <td className="px-4 py-2.5 text-right tabular-nums whitespace-nowrap">
                       <div className="font-extrabold text-slate-900 dark:text-white">
-                        {formatearMoneda(t.costoTotal)}
+                        {t.costoTotal === 0 ? 'Sin cargo ($0)' : formatearMoneda(t.costoTotal)}
                       </div>
                       <div
                         className={`text-[10px] font-bold ${
-                          t.pagado
+                          t.costoTotal === 0 || t.pagado
                             ? 'text-emerald-700 dark:text-emerald-400'
                             : 'text-amber-700 dark:text-amber-300'
                         }`}
                       >
-                        {t.pagado
+                        {t.costoTotal === 0
+                          ? 'Bonificado (Socios)'
+                          : t.pagado
                           ? t.metodoPago === 'transferencia'
                             ? 'Pagó Alias MP'
                             : 'Pagó Efectivo'

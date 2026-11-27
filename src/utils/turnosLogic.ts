@@ -1,4 +1,4 @@
-import { Turno, ParejaTurno } from '../types';
+import { Turno, ParejaTurno, HorarioConfig, Jugador } from '../types';
 
 export function formatearMoneda(monto: number): string {
   return new Intl.NumberFormat('es-AR', {
@@ -41,14 +41,23 @@ export function validarReserva(
   p2: ParejaTurno,
   organizadorNombre: string
 ): ValidacionReserva {
-  const jugadores = [p1.delantero, p1.zaguero, p2.delantero, p2.zaguero]
-    .map((n) => (n || '').trim())
-    .filter(Boolean);
+  const slots = [
+    { puesto: 'Delantero 1', nombre: (p1.delantero || '').trim() },
+    { puesto: 'Zaguero 1', nombre: (p1.zaguero || '').trim() },
+    { puesto: 'Delantero 2', nombre: (p2.delantero || '').trim() },
+    { puesto: 'Zaguero 2', nombre: (p2.zaguero || '').trim() },
+  ];
 
-  if (jugadores.length === 0) {
-    return { valido: false, error: 'Selecciona al menos 1 pelotari para reservar el turno.' };
+  const vacios = slots.filter((s) => !s.nombre);
+  if (vacios.length > 0) {
+    const puestosFaltantes = vacios.map((s) => s.puesto).join(', ');
+    return {
+      valido: false,
+      error: `Todos los puestos deben estar completos para reservar. Falta: ${puestosFaltantes}. Si algún jugador no está registrado, usá la opción "Invitado".`,
+    };
   }
 
+  const jugadores = slots.map((s) => s.nombre);
   const unicos = new Set(jugadores.map((j) => j.toLowerCase()));
   if (unicos.size < jugadores.length) {
     return { valido: false, error: 'No se puede repetir el mismo jugador en el mismo turno.' };
@@ -84,10 +93,15 @@ export function generarMensajeWhatsAppTurno(turno: Turno, etiquetaHorario: strin
   const p2Txt = p2 ? `🎾 *Pareja 2*: ${p2.delantero || 'A confirmar'} (D) y ${p2.zaguero || 'A confirmar'} (Z)` : '';
   const org = turno.organizadorNombre ? `👤 *Organiza*: ${turno.organizadorNombre}` : '';
   const notas = turno.notas ? `📝 *Notas*: ${turno.notas}` : '';
-  const costo = turno.costoTotal ? `💰 *Valor*: ${formatearMoneda(turno.costoTotal)} ${turno.pagado ? '(PAGADO ✅)' : '(A abonar en cantina)'}` : '';
+  const costo =
+    turno.costoTotal === 0
+      ? `💰 *Valor*: Sin cargo (Pelotaris registrados ✅)`
+      : turno.costoTotal
+        ? `💰 *Valor*: ${formatearMoneda(turno.costoTotal)} ${turno.pagado ? '(PAGADO ✅)' : '(A abonar en cantina)'}`
+        : '';
 
   return encodeURIComponent(
-`🏛️ *CLUB ATLÉTICO RÍO COLORADO*
+    `🏛️ *CLUB ATLÉTICO RÍO COLORADO*
 🎾 *Trinquete de Pelota Paleta*
 
 📅 *Fecha*: ${fechaStr}
@@ -506,5 +520,55 @@ export function evaluarLimiteTurnoDiario(params: {
   }
 
   return { alcanzado: false };
+}
+
+const PLACEHOLDERS_SIN_JUGADOR = new Set(['', 'a confirmar', 'por definir']);
+
+/**
+ * Returns true when at least one non-empty player slot is an unregistered guest
+ * (either prefixed with "Invitado:" or not matching an active player in `jugadores`).
+ */
+export function tieneInvitadoEnTurno(
+  p1: ParejaTurno | null | undefined,
+  p2: ParejaTurno | null | undefined,
+  jugadores: Jugador[]
+): boolean {
+  const slots = [p1?.delantero, p1?.zaguero, p2?.delantero, p2?.zaguero]
+    .map((nombre) => (nombre || '').trim())
+    .filter((nombre) => {
+      const norm = normalizarIdentidadReserva(nombre);
+      return !PLACEHOLDERS_SIN_JUGADOR.has(norm);
+    });
+
+  if (slots.length === 0) return false;
+
+  const registrados = new Set(
+    jugadores
+      .filter((j) => j.activo !== false)
+      .map((j) => normalizarIdentidadReserva(j.nombre))
+      .filter(Boolean)
+  );
+
+  return slots.some((nombre) => {
+    if (/^invitado\s*:/i.test(nombre)) return true;
+    const norm = normalizarIdentidadReserva(nombre);
+    return !registrados.has(norm);
+  });
+}
+
+/**
+ * Charges court + lights fee only if at least one player is an unregistered guest.
+ * Registered pelotaris cover court usage through their monthly membership ($0).
+ */
+export function calcularCostoTurno(
+  horario: Pick<HorarioConfig, 'precioCancha' | 'precioLuz'>,
+  p1: ParejaTurno | null | undefined,
+  p2: ParejaTurno | null | undefined,
+  jugadores: Jugador[]
+): number {
+  if (!tieneInvitadoEnTurno(p1, p2, jugadores)) {
+    return 0;
+  }
+  return Number(horario.precioCancha || 0) + Number(horario.precioLuz || 0);
 }
 

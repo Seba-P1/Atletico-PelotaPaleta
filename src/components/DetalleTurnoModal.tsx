@@ -80,6 +80,7 @@ export const DetalleTurnoModal: React.FC<DetalleTurnoModalProps> = ({
 
   const p1 = turno.p1;
   const p2 = turno.p2;
+  const costoTurno = turno.costoTotal ?? (horario.precioCancha + horario.precioLuz);
   const jugadoresActivos = jugadores.filter((j) => j.activo);
   const pelotarisOrdenados = [...jugadoresActivos].sort((a, b) =>
     a.nombre.localeCompare(b.nombre, 'es')
@@ -432,14 +433,18 @@ export const DetalleTurnoModal: React.FC<DetalleTurnoModalProps> = ({
               <div className="flex justify-between items-center">
                 <span className="text-slate-500 dark:text-slate-400">Costo Total Turno:</span>
                 <span className="font-extrabold text-slate-900 dark:text-emerald-400 tabular-nums">
-                  {formatearMoneda(turno.costoTotal || horario.precioCancha + horario.precioLuz)}
+                  {costoTurno === 0 ? 'Sin cargo ($0 · Registrados)' : formatearMoneda(costoTurno)}
                 </span>
               </div>
 
               <div className="flex justify-between items-center">
                 <span className="text-slate-500 dark:text-slate-400">Estado de Cobro:</span>
                 <span>
-                  {turno.pagado ? (
+                  {costoTurno === 0 ? (
+                    <span className="text-emerald-700 dark:text-emerald-400 font-bold">
+                      BONIFICADO (MENSUALIDAD) ✅
+                    </span>
+                  ) : turno.pagado ? (
                     <span className="text-emerald-700 dark:text-emerald-400 font-bold">
                       PAGADO ({turno.metodoPago?.toUpperCase() || 'ABONADO'}) ✅
                     </span>
@@ -451,7 +456,7 @@ export const DetalleTurnoModal: React.FC<DetalleTurnoModalProps> = ({
                 </span>
               </div>
 
-              {!turno.pagado && clubConfig.aliasTransferencia && (
+              {!turno.pagado && costoTurno > 0 && clubConfig.aliasTransferencia && (
                 <div className="pt-1.5 border-t border-slate-200 dark:border-slate-800 flex items-center gap-1.5 text-[11px] text-slate-600 dark:text-slate-400">
                   <CreditCard className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                   <span>
@@ -556,7 +561,7 @@ export const DetalleTurnoModal: React.FC<DetalleTurnoModalProps> = ({
 
             {/* Acciones del Turno */}
             <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2.5">
-              {esAdmin && !turno.pagado && (
+              {esAdmin && !turno.pagado && costoTurno > 0 && (
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => onCobrarTurno(turno.id, 'efectivo')}

@@ -9,6 +9,8 @@ import {
   evaluarLimiteTurnoDiario,
   formatearObservacionInvitado,
   combinarNotasInvitado,
+  tieneInvitadoEnTurno,
+  calcularCostoTurno,
 } from '../utils/turnosLogic';
 import { evaluarJugadoresParaReserva } from '../utils/billingLogic';
 import {
@@ -84,8 +86,8 @@ const SelectorPelotari: React.FC<SelectorPelotariProps> = ({
           type="button"
           onClick={() => setAbierto((prev) => !prev)}
           className={`w-full bg-white dark:bg-slate-900 border rounded-lg px-2.5 py-2 text-xs flex items-center justify-between transition text-left cursor-pointer ${abierto
-              ? 'border-emerald-500 ring-1 ring-emerald-500/20'
-              : 'border-slate-300 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-600'
+            ? 'border-emerald-500 ring-1 ring-emerald-500/20'
+            : 'border-slate-300 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-600'
             }`}
         >
           <span className="truncate pr-4">
@@ -153,8 +155,8 @@ const SelectorPelotari: React.FC<SelectorPelotariProps> = ({
                   setBusqueda('');
                 }}
                 className={`w-full text-left px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition cursor-pointer flex items-center justify-between ${!value
-                    ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300'
-                    : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300'
+                  : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'
                   }`}
               >
                 <span>— Por definir / A confirmar (dejar libre) —</span>
@@ -181,10 +183,10 @@ const SelectorPelotari: React.FC<SelectorPelotariProps> = ({
                           setBusqueda('');
                         }}
                         className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-between transition ${seleccionado
-                            ? 'bg-emerald-100 dark:bg-emerald-900/60 text-emerald-900 dark:text-emerald-100 font-bold'
-                            : ocupado
-                              ? 'opacity-40 cursor-not-allowed bg-slate-100/50 dark:bg-slate-800/40 text-slate-400'
-                              : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 cursor-pointer'
+                          ? 'bg-emerald-100 dark:bg-emerald-900/60 text-emerald-900 dark:text-emerald-100 font-bold'
+                          : ocupado
+                            ? 'opacity-40 cursor-not-allowed bg-slate-100/50 dark:bg-slate-800/40 text-slate-400'
+                            : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 cursor-pointer'
                           }`}
                       >
                         <span className="truncate">{j.nombre}</span>
@@ -286,7 +288,25 @@ export const ReservaModal: React.FC<ReservaModalProps> = ({
     return () => clearInterval(id);
   }, []);
 
-  const costoTotal = horario.precioCancha + horario.precioLuz;
+  const invitadoEtiquetaPreview =
+    incluirInvitado
+      ? `Invitado: ${invitadoNombre.trim() || 'Invitado'}`
+      : null;
+
+  const p1Preview: ParejaTurno = {
+    nombre: 'P1',
+    delantero: invitadoEtiquetaPreview && invitadoPuesto === 'p1Del' ? invitadoEtiquetaPreview : p1Delantero,
+    zaguero: invitadoEtiquetaPreview && invitadoPuesto === 'p1Zag' ? invitadoEtiquetaPreview : p1Zaguero,
+  };
+  const p2Preview: ParejaTurno = {
+    nombre: 'P2',
+    delantero: invitadoEtiquetaPreview && invitadoPuesto === 'p2Del' ? invitadoEtiquetaPreview : p2Delantero,
+    zaguero: invitadoEtiquetaPreview && invitadoPuesto === 'p2Zag' ? invitadoEtiquetaPreview : p2Zaguero,
+  };
+
+  const hayInvitado = tieneInvitadoEnTurno(p1Preview, p2Preview, jugadores);
+  const costoTotal = calcularCostoTurno(horario, p1Preview, p2Preview, jugadores);
+  const tarifaBaseCancha = Number(horario.precioCancha || 0) + Number(horario.precioLuz || 0);
 
   const ventanaReserva = evaluarVentanaReserva({
     fechaSeleccionada: fechaStr,
@@ -365,10 +385,14 @@ export const ReservaModal: React.FC<ReservaModalProps> = ({
     let p2ZagFinal = p2Zaguero;
     const obsInvitados: string[] = [];
 
-    if (esAdmin && incluirInvitado) {
+    if (incluirInvitado) {
       const nombreInv = invitadoNombre.trim();
       if (!nombreInv) {
         setErrorMsg('Ingresa el nombre del pelotari invitado (no registrado).');
+        return;
+      }
+      if (!invitadoObs.trim()) {
+        setErrorMsg('Ingresa el DNI o teléfono del invitado.');
         return;
       }
       const etiquetaInv = `Invitado: ${nombreInv}`;
@@ -407,6 +431,10 @@ export const ReservaModal: React.FC<ReservaModalProps> = ({
 
     const claveTurno = generarClaveTurno(fechaStr, horario.id);
     const notasFinal = combinarNotasInvitado(notas, obsInvitados);
+    const costoFinal = calcularCostoTurno(horario, p1, p2, jugadores);
+    const pagadoFinal = esAdmin && costoFinal > 0 ? pagarAhora : false;
+    const metodoPagoFinal = pagadoFinal ? metodoPago : undefined;
+
     const nuevoTurno: Turno = {
       id: claveTurno,
       horarioId: horario.id,
@@ -416,16 +444,16 @@ export const ReservaModal: React.FC<ReservaModalProps> = ({
       p2,
       organizadorNombre: orgFinal,
       notas: notasFinal,
-      costoTotal,
-      pagado: pagarAhora,
-      metodoPago: pagarAhora ? metodoPago : undefined,
+      costoTotal: costoFinal,
+      pagado: pagadoFinal,
+      metodoPago: metodoPagoFinal,
       fechaReserva: new Date().toISOString(),
       registradoPor: esAdmin ? usuarioActual : orgFinal,
     };
 
     setEnviando(true);
     try {
-      const resultado = await onConfirmarReserva(nuevoTurno, pagarAhora, metodoPago);
+      const resultado = await onConfirmarReserva(nuevoTurno, pagadoFinal, metodoPagoFinal);
       if (resultado && resultado.ok === false) {
         setErrorMsg(resultado.error || 'No se pudo completar la reserva.');
         return;
@@ -466,28 +494,46 @@ export const ReservaModal: React.FC<ReservaModalProps> = ({
         </div>
 
         {/* Tarifa Informativa */}
-        <div className="flex items-center justify-between p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950/70 border border-slate-200 dark:border-slate-800 text-xs">
-          <div className="space-y-0.5">
-            <span className="text-slate-500 dark:text-slate-400">Arancel Cancha:</span>
-            <div className="font-bold text-slate-900 dark:text-white tabular-nums">
-              {formatearMoneda(horario.precioCancha)}
-            </div>
-          </div>
-          {horario.precioLuz > 0 && (
+        <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950/70 border border-slate-200 dark:border-slate-800 text-xs space-y-2">
+          <div className="flex items-center justify-between gap-2">
             <div className="space-y-0.5">
-              <span className="text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                <Zap className="w-3 h-3 text-emerald-600 dark:text-emerald-400" /> Luz Nocturna:
-              </span>
-              <div className="font-bold text-slate-800 dark:text-slate-200 tabular-nums">
-                {formatearMoneda(horario.precioLuz)}
+              <span className="text-slate-500 dark:text-slate-400">Tarifa Invitado (Cancha):</span>
+              <div className="font-bold text-slate-900 dark:text-white tabular-nums">
+                {formatearMoneda(horario.precioCancha)}
               </div>
             </div>
-          )}
-          <div className="space-y-0.5 text-right">
-            <span className="text-slate-500 dark:text-slate-400 font-semibold">Total Turno:</span>
-            <div className="font-extrabold text-emerald-600 dark:text-emerald-400 text-sm tabular-nums">
-              {formatearMoneda(costoTotal)}
+            {horario.precioLuz > 0 && (
+              <div className="space-y-0.5">
+                <span className="text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                  <Zap className="w-3 h-3 text-emerald-600 dark:text-emerald-400" /> Luz Nocturna:
+                </span>
+                <div className="font-bold text-slate-800 dark:text-slate-200 tabular-nums">
+                  {formatearMoneda(horario.precioLuz)}
+                </div>
+              </div>
+            )}
+            <div className="space-y-0.5 text-right">
+              <span className="text-slate-500 dark:text-slate-400 font-semibold">Total a Pagar:</span>
+              <div
+                className={`font-extrabold text-sm tabular-nums ${costoTotal === 0
+                  ? 'text-emerald-600 dark:text-emerald-400'
+                  : 'text-amber-700 dark:text-amber-400'
+                  }`}
+              >
+                {costoTotal === 0 ? 'Sin cargo ($0)' : formatearMoneda(costoTotal)}
+              </div>
             </div>
+          </div>
+
+          <div
+            className={`text-[11px] px-2.5 py-1.5 rounded-lg border ${hayInvitado
+              ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800/70 text-amber-900 dark:text-amber-200'
+              : 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/70 text-emerald-900 dark:text-emerald-200'
+              }`}
+          >
+            {hayInvitado
+              ? `Se cobra arancel completo (${formatearMoneda(tarifaBaseCancha)}) porque participa un invitado no registrado.`
+              : 'Pelotaris registrados: cancha bonificada con la mensualidad. Solo se abona si participa algún invitado no registrado.'}
           </div>
         </div>
 
@@ -498,10 +544,10 @@ export const ReservaModal: React.FC<ReservaModalProps> = ({
               {requiereRegistro
                 ? 'Solo los usuarios registrados pueden reservar turnos. Iniciá sesión o registrate primero.'
                 : limiteDiario.alcanzado
-                ? limiteDiario.motivo || 'Ya tenés un turno reservado hoy. Solo se permite 1 turno por día por persona.'
-                : horarioPasado.pasado
-                ? horarioPasado.motivo || 'El horario de este turno ya comenzó o finalizó.'
-                : ventanaReserva.motivo}
+                  ? limiteDiario.motivo || 'Ya tenés un turno reservado hoy. Solo se permite 1 turno por día por persona.'
+                  : horarioPasado.pasado
+                    ? horarioPasado.motivo || 'El horario de este turno ya comenzó o finalizó.'
+                    : ventanaReserva.motivo}
             </span>
           </div>
         )}
@@ -570,7 +616,7 @@ export const ReservaModal: React.FC<ReservaModalProps> = ({
         {onAbrirRegistroJugador && (
           <div className="p-3 rounded-xl border text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/60 text-emerald-900 dark:text-emerald-200">
             <span>
-              Podés reservar con 1, 2, 3 o los 4 pelotaris (dejando los puestos restantes &quot;A confirmar&quot;). ¿Falta registrar a alguien en el padrón?
+              Todos los puestos deben estar completos (4 pelotaris). Si algún jugador no está registrado, usá la opción &quot;Invitado&quot;. ¿Falta registrar a alguien en el padrón?
             </span>
             <button
               type="button"
@@ -677,68 +723,74 @@ export const ReservaModal: React.FC<ReservaModalProps> = ({
             </div>
           </div>
 
-          {/* Servicio de Invitado para Jugador no Registrado (Operado por Cantina o Comisión) */}
-          {esAdmin && (
-            <div className="p-3.5 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/50 space-y-2.5 text-xs">
-              <label className="flex items-center gap-2 cursor-pointer font-bold text-emerald-800 dark:text-emerald-300">
-                <input
-                  type="checkbox"
-                  checked={incluirInvitado}
-                  onChange={(e) => setIncluirInvitado(e.target.checked)}
-                  className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 w-4 h-4"
-                />
-                <span>Servicio de Invitado (pelotari no registrado en el padrón)</span>
-              </label>
+          {/* Servicio de Invitado para Jugador no Registrado */}
+          <div className="p-3.5 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/50 space-y-2.5 text-xs">
+            <label className="flex items-center gap-2 cursor-pointer font-bold text-emerald-800 dark:text-emerald-300">
+              <input
+                type="checkbox"
+                checked={incluirInvitado}
+                onChange={(e) => setIncluirInvitado(e.target.checked)}
+                className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 w-4 h-4"
+              />
+              <span>¿Juega un invitado? (pelotari no registrado en el padrón)</span>
+            </label>
 
-              {incluirInvitado && (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
-                  <div>
-                    <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 block mb-1">
-                      Reemplaza puesto:
-                    </label>
-                    <select
-                      value={invitadoPuesto}
-                      onChange={(e) => setInvitadoPuesto(e.target.value as any)}
-                      className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-1.5 text-xs font-semibold"
-                    >
-                      <option value="p2Zag">Zaguero 2</option>
-                      <option value="p2Del">Delantero 2</option>
-                      <option value="p1Zag">Zaguero 1</option>
-                      <option value="p1Del">Delantero 1</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 block mb-1">
-                      Nombre del Invitado *
-                    </label>
-                    <input
-                      type="text"
-                      value={invitadoNombre}
-                      onChange={(e) => setInvitadoNombre(e.target.value)}
-                      placeholder="Ej: Martín Sosa"
-                      className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 block mb-1">
-                      Observación / Datos
-                    </label>
-                    <input
-                      type="text"
-                      value={invitadoObs}
-                      onChange={(e) => setInvitadoObs(e.target.value)}
-                      placeholder="DNI o tel. / trae amigo..."
-                      className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs"
-                    />
-                  </div>
+            {incluirInvitado && (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
+                <div>
+                  <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 block mb-1">
+                    Puesto del Invitado *
+                  </label>
+                  <select
+                    value={invitadoPuesto}
+                    onChange={(e) => setInvitadoPuesto(e.target.value as any)}
+                    className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-1.5 text-xs font-semibold"
+                  >
+                    <option value="p2Zag">Zaguero 2</option>
+                    <option value="p2Del">Delantero 2</option>
+                    <option value="p1Zag">Zaguero 1</option>
+                    <option value="p1Del">Delantero 1</option>
+                  </select>
                 </div>
-              )}
+                <div>
+                  <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 block mb-1">
+                    Nombre del Invitado *
+                  </label>
+                  <input
+                    type="text"
+                    value={invitadoNombre}
+                    onChange={(e) => setInvitadoNombre(e.target.value)}
+                    placeholder="Ej: Martín Sosa"
+                    className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 block mb-1">
+                    DNI o Teléfono *
+                  </label>
+                  <input
+                    type="text"
+                    value={invitadoObs}
+                    onChange={(e) => setInvitadoObs(e.target.value)}
+                    placeholder="Ej: 30111222 / 2931445566"
+                    className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="text-[10px] text-slate-500 dark:text-slate-400">
+              Si un jugador no está registrado en el padrón del club, activá esta opción e ingresá sus datos. Se cobrará arancel de cancha.
             </div>
-          )}
+          </div>
 
           {/* Pago en el Momento (Admin / Cantina) o Información de Abono (Socio) */}
           <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950/70 border border-slate-200 dark:border-slate-800 space-y-2.5 text-xs">
-            {esAdmin ? (
+            {costoTotal === 0 ? (
+              <div className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
+                Turno sin cargo de cancha ($0): todos los pelotaris convocados están registrados y cubiertos por la mensualidad.
+              </div>
+            ) : esAdmin ? (
               <>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <label className="flex items-center gap-2 cursor-pointer text-slate-800 dark:text-slate-200">
@@ -757,8 +809,8 @@ export const ReservaModal: React.FC<ReservaModalProps> = ({
                         type="button"
                         onClick={() => setMetodoPago('efectivo')}
                         className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${metodoPago === 'efectivo'
-                            ? 'bg-emerald-600 text-white'
-                            : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-400'
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-400'
                           }`}
                       >
                         Efectivo
@@ -767,8 +819,8 @@ export const ReservaModal: React.FC<ReservaModalProps> = ({
                         type="button"
                         onClick={() => setMetodoPago('transferencia')}
                         className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${metodoPago === 'transferencia'
-                            ? 'bg-slate-800 dark:bg-slate-700 text-white'
-                            : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-400'
+                          ? 'bg-slate-800 dark:bg-slate-700 text-white'
+                          : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-400'
                           }`}
                       >
                         Alias Mercado Pago
@@ -827,11 +879,10 @@ export const ReservaModal: React.FC<ReservaModalProps> = ({
             <button
               type="submit"
               disabled={reservaBloqueadaParaUsuario || enviando}
-              className={`px-5 py-2.5 rounded-xl text-white text-xs font-bold shadow-xs transition flex items-center gap-1.5 ${
-                reservaBloqueadaParaUsuario || enviando
-                  ? 'bg-slate-400 dark:bg-slate-700 cursor-not-allowed opacity-70'
-                  : 'bg-emerald-600 hover:bg-emerald-700 cursor-pointer'
-              }`}
+              className={`px-5 py-2.5 rounded-xl text-white text-xs font-bold shadow-xs transition flex items-center gap-1.5 ${reservaBloqueadaParaUsuario || enviando
+                ? 'bg-slate-400 dark:bg-slate-700 cursor-not-allowed opacity-70'
+                : 'bg-emerald-600 hover:bg-emerald-700 cursor-pointer'
+                }`}
             >
               {reservaBloqueadaParaUsuario ? (
                 <>

@@ -476,7 +476,8 @@ export const supabaseRepository = {
     p1: ParejaTurno,
     p2: ParejaTurno,
     organizadorNombre: string,
-    notas: string
+    notas: string,
+    costoTotal?: number
   ): Promise<Turno> {
     const client = getClient();
     const { data, error } = await client
@@ -486,6 +487,7 @@ export const supabaseRepository = {
         p2,
         organizador_nombre: organizadorNombre,
         notas: notas.trim() || null,
+        ...(costoTotal !== undefined ? { costo_total: costoTotal } : {}),
       })
       .eq('id', turnoId)
       .select()

@@ -206,10 +206,15 @@ export const AdminHistorialTurnosSection: React.FC<AdminHistorialTurnosSectionPr
                     </td>
                     <td className="px-4 py-3 text-right whitespace-nowrap tabular-nums">
                       <div className="font-extrabold text-slate-900 dark:text-white">
-                        {formatearMoneda(f.costoTotal)}
+                        {f.costoTotal === 0 ? 'Sin cargo ($0)' : formatearMoneda(f.costoTotal)}
                       </div>
                       <div className="inline-flex items-center gap-1 text-[10px] font-bold">
-                        {f.pagado ? (
+                        {f.costoTotal === 0 ? (
+                          <span className="text-emerald-700 dark:text-emerald-400 inline-flex items-center gap-0.5">
+                            <CheckCircle2 className="w-3 h-3" />
+                            Bonificado (Socios)
+                          </span>
+                        ) : f.pagado ? (
                           <span className="text-emerald-700 dark:text-emerald-400 inline-flex items-center gap-0.5">
                             <CheckCircle2 className="w-3 h-3" />
                             {f.metodoPago === 'transferencia' ? 'Alias MP' : 'Efectivo'}

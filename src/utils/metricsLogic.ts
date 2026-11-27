@@ -159,7 +159,7 @@ export function calcularMetricasDiarias(params: {
 
   const detalleTurnosDia: FilaActividadTurno[] = turnosDiaLista.map((t) => {
     const hor = horariosMap.get(t.horarioId);
-    const costo = Number(t.costoTotal || (hor ? hor.precioCancha + hor.precioLuz : 0));
+    const costo = Number(t.costoTotal ?? (hor ? hor.precioCancha + hor.precioLuz : 0));
     if (t.pagado) {
       turnosPagados += 1;
       if (t.metodoPago === 'transferencia') turnosTransferencia += costo;
@@ -368,7 +368,7 @@ export function filtrarHistorialTurnos(
     })
     .map((t) => {
       const hor = horariosMap.get(t.horarioId);
-      const costo = Number(t.costoTotal || (hor ? hor.precioCancha + hor.precioLuz : 0));
+      const costo = Number(t.costoTotal ?? (hor ? hor.precioCancha + hor.precioLuz : 0));
       return {
         turnoId: t.id,
         fecha: t.fecha,
